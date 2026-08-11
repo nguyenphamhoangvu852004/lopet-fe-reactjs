@@ -1,0 +1,1504 @@
+/**
+ * Design system lấy cảm hứng từ layout của các template mạng xã hội kiểu
+ * "Sociala": thẻ bo tròn lớn, đổ bóng rất mềm, sidebar trái cố định, cột phải
+ * chứa widget, accent tím. Toàn bộ token và component ở đây tự viết, không
+ * dùng asset của template thương mại nào.
+ */
+
+:root {
+  --brand: #8a5cf6;
+  --brand-strong: #6d3ff0;
+  --brand-soft: #f1ecfe;
+  --accent: #ff5c8a;
+  --success: #1fa971;
+  --warn: #e0952b;
+  --danger: #e5484d;
+
+  --bg: #f2f5f9;
+  --surface: #ffffff;
+  --surface-2: #f7f8fb;
+  --border: #e6e9f0;
+  --text: #1b1d29;
+  --text-dim: #6b7186;
+  --text-faint: #9aa0b4;
+
+  --radius-sm: 10px;
+  --radius: 16px;
+  --radius-lg: 22px;
+  --shadow: 0 6px 24px rgba(24, 28, 51, 0.06);
+  --shadow-lg: 0 12px 40px rgba(24, 28, 51, 0.1);
+
+  --sidebar-w: 248px;
+  --rail-w: 300px;
+  --topbar-h: 66px;
+
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --brand: #a480ff;
+  --brand-strong: #8a5cf6;
+  --brand-soft: #241f3d;
+  --bg: #0f1118;
+  --surface: #171a24;
+  --surface-2: #1e2230;
+  --border: #272c3b;
+  --text: #eef0f6;
+  --text-dim: #a2a9bf;
+  --text-faint: #737a90;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* ───────────────────────── layout ───────────────────────── */
+
+.shell {
+  min-height: 100%;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--brand), var(--accent));
+  color: #fff;
+  font-size: 17px;
+}
+
+.search {
+  flex: 1;
+  max-width: 420px;
+  position: relative;
+}
+
+.search input {
+  width: 100%;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 0 16px 0 40px;
+  outline: none;
+}
+
+.search input:focus {
+  border-color: var(--brand);
+  background: var(--surface);
+}
+
+.search .icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+}
+
+.topbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--rail-w);
+  gap: 22px;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 22px 20px 60px;
+  align-items: start;
+}
+
+.sidebar,
+.rail {
+  position: sticky;
+  top: calc(var(--topbar-h) + 22px);
+}
+
+.main-col {
+  min-width: 0;
+  display: grid;
+  gap: 18px;
+}
+
+/* ───────────────────────── nav ───────────────────────── */
+
+.nav {
+  display: grid;
+  gap: 4px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-weight: 600;
+  transition: 0.15s;
+}
+
+.nav-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.nav-item.active {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.nav-item .glyph {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  font-size: 14px;
+}
+
+.nav-item.active .glyph {
+  background: var(--brand);
+  color: #fff;
+}
+
+.nav-section {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  font-weight: 700;
+  padding: 14px 12px 6px;
+}
+
+/* ───────────────────────── card ───────────────────────── */
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+
+.card-tight {
+  padding: 14px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.card-title {
+  font-weight: 750;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.card-sub {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+/* ───────────────────────── bits ───────────────────────── */
+
+.avatar {
+  border-radius: 50%;
+  object-fit: cover;
+  background: linear-gradient(135deg, var(--brand), var(--accent));
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  flex: none;
+  overflow: hidden;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: var(--brand);
+  color: #fff;
+  font-weight: 650;
+  cursor: pointer;
+  transition: 0.15s;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--border);
+  color: var(--text);
+}
+
+.btn-outline {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+.btn-outline:hover:not(:disabled) {
+  border-color: var(--brand);
+  color: var(--brand-strong);
+  background: transparent;
+}
+
+.btn-danger {
+  background: var(--danger);
+}
+.btn-danger:hover:not(:disabled) {
+  background: #c93b40;
+}
+
+.btn-sm {
+  height: 32px;
+  padding: 0 13px;
+  font-size: 13px;
+}
+
+.btn-icon {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+.btn-icon:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.field label {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-dim);
+}
+
+.input,
+.textarea,
+.select {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 11px 14px;
+  outline: none;
+  transition: 0.15s;
+}
+
+.input:focus,
+.textarea:focus,
+.select:focus {
+  border-color: var(--brand);
+  background: var(--surface);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 90px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+
+.badge-brand {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+.badge-ok {
+  background: rgba(31, 169, 113, 0.12);
+  color: var(--success);
+}
+.badge-warn {
+  background: rgba(224, 149, 43, 0.14);
+  color: var(--warn);
+}
+.badge-danger {
+  background: rgba(229, 72, 77, 0.12);
+  color: var(--danger);
+}
+
+.stack {
+  display: grid;
+  gap: 12px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.muted {
+  color: var(--text-dim);
+}
+.faint {
+  color: var(--text-faint);
+  font-size: 12.5px;
+}
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  background: var(--surface-2);
+  padding: 4px;
+  border-radius: 999px;
+}
+
+.tab {
+  flex: 1;
+  height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: var(--surface);
+  color: var(--brand-strong);
+  box-shadow: var(--shadow);
+}
+
+/* ───────────────────────── post ───────────────────────── */
+
+.post-media {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-top: 12px;
+}
+
+.post-media img,
+.post-media video {
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  display: block;
+}
+
+.post-actions {
+  display: flex;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+  padding-top: 10px;
+}
+
+.post-action {
+  flex: 1;
+  height: 38px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.post-action:hover {
+  background: var(--surface-2);
+}
+.post-action.on {
+  color: var(--accent);
+}
+
+/* ───────────────────────── misc ───────────────────────── */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.table th {
+  text-align: left;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.table td {
+  padding: 11px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.table tr:last-child td {
+  border-bottom: 0;
+}
+.table-wrap {
+  overflow-x: auto;
+}
+
+.empty {
+  text-align: center;
+  padding: 34px 18px;
+  color: var(--text-dim);
+}
+.empty .big {
+  font-size: 34px;
+  margin-bottom: 8px;
+}
+
+.alert {
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.alert-error {
+  background: rgba(229, 72, 77, 0.1);
+  color: var(--danger);
+}
+.alert-ok {
+  background: rgba(31, 169, 113, 0.1);
+  color: var(--success);
+}
+.alert-info {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  margin: 26px auto;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 14, 22, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.modal {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 460px;
+  padding: 22px;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+/* ───────────────────────── auth ───────────────────────── */
+
+.auth {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.auth-art {
+  background: linear-gradient(150deg, var(--brand), var(--accent));
+  color: #fff;
+  padding: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+}
+
+.auth-art h1 {
+  font-size: 40px;
+  line-height: 1.15;
+  margin: 0;
+  letter-spacing: -0.03em;
+}
+
+.auth-form-wrap {
+  display: grid;
+  place-items: center;
+  padding: 40px 24px;
+}
+
+.auth-form {
+  width: 100%;
+  max-width: 380px;
+}
+
+.cover {
+  height: 190px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--brand), var(--accent));
+  object-fit: cover;
+  width: 100%;
+  display: block;
+}
+
+.bubble {
+  max-width: 74%;
+  padding: 9px 14px;
+  border-radius: 18px;
+  background: var(--surface-2);
+  width: fit-content;
+}
+
+.bubble.mine {
+  margin-left: auto;
+  background: var(--brand);
+  color: #fff;
+}
+
+/* ─────────────── bổ sung cho phần tích hợp API ─────────────── */
+
+/** Huy hiệu đếm ở thanh điều hướng và danh sách hội thoại */
+.pill {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent, #ef4444);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+/** Nút dạng chữ (trả lời bình luận, huỷ trả lời) */
+.link-btn {
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 650;
+}
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+/** Nội dung bài viết bấm được để mở trang chi tiết */
+.post-body {
+  display: block;
+  color: inherit;
+}
+.post-body:hover {
+  color: inherit;
+}
+
+/** Link trong post-action giữ đúng dáng của nút bên cạnh */
+a.post-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+/* ─────────────────── trang tin nhắn (messenger) ─────────────────── */
+
+/**
+ * Bố cục hai khung chiếm trọn chiều cao còn lại, thay cho khung chat cũ bị bó
+ * trong một thẻ card cao 52vh.
+ */
+.messenger {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  /* .layout co padding doc 22px + 60px, tru du de khung chat khong vuot man
+     hinh (neu khong ca trang se co thanh cuon va tin cuoi bi khuat) */
+  height: calc(100dvh - var(--topbar-h) - 82px);
+  min-height: 460px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.conv-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* min-height:0 de .conv-list co the cuon trong khung thay vi lam tran khung */
+  min-height: 0;
+  border-right: 1px solid var(--border);
+}
+
+.conv-head {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.conv-head .card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.conv-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.conv-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.conv-item:hover {
+  background: var(--surface-2);
+}
+
+.conv-item.active {
+  background: var(--surface-2);
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.conv-name {
+  font-weight: 650;
+  font-size: 14px;
+}
+
+.conv-preview {
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+
+/* Đoạn chat chưa đọc: đậm lên như mọi ứng dụng nhắn tin */
+.conv-item.unread .conv-name,
+.conv-item.unread .conv-preview {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.conv-meta {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
+.conv-meta .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand);
+}
+
+.chat-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* Thieu dong nay thi .chat-scroll gian het co va o soan tin bi day ra ngoai */
+  min-height: 0;
+}
+
+.chat-empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  align-content: start;
+}
+
+/* Vạch ngăn ngày giữa các cụm tin */
+.day-divider {
+  display: flex;
+  justify-content: center;
+  margin: 14px 0 10px;
+}
+
+.day-divider span {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  background: var(--surface-2);
+  padding: 3px 12px;
+  border-radius: 999px;
+}
+
+/* Một cụm = nhiều tin liên tiếp của cùng người trong vòng 5 phút */
+.msg-group {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.msg-group.mine {
+  justify-content: flex-end;
+}
+
+.msg-stack {
+  display: grid;
+  gap: 2px;
+  max-width: min(70%, 520px);
+}
+
+.msg-group.mine .msg-stack {
+  justify-items: end;
+}
+
+.msg-stack .bubble {
+  max-width: 100%;
+}
+
+/* Tin đang bay lên server */
+.bubble.pending {
+  opacity: 0.6;
+}
+
+.bubble-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bubble-image {
+  display: block;
+  max-width: 240px;
+  border-radius: 12px;
+  margin-top: 4px;
+}
+
+.bubble-meta {
+  font-size: 10.5px;
+  opacity: 0.72;
+  margin-top: 3px;
+}
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.composer-input {
+  flex: 1;
+  resize: none;
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface-2);
+  color: inherit;
+  font: inherit;
+  line-height: 1.4;
+}
+
+.composer-input:focus {
+  outline: none;
+  border-color: var(--brand);
+}
+
+.composer-attachment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.composer-attachment img {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+
+/* ═══════════════════════════ RESPONSIVE ═══════════════════════════
+ *
+ * Toàn bộ điểm ngắt gom về một chỗ, đi từ rộng xuống hẹp:
+ *
+ *   > 1280px   desktop      sidebar + nội dung + cột phải
+ *   1025–1280  laptop       thu hẹp hai cột bên, giảm khoảng cách
+ *   861–1024   tablet ngang bỏ cột phải, giữ sidebar
+ *   561–860    tablet dọc   sidebar thành thanh điều hướng dưới đáy
+ *   ≤ 560px    mobile       nới sát mép, thu nhỏ chữ và ảnh bìa
+ *
+ * Quy tắc chung: không đặt selector nhiều lớp (kiểu .layout.no-rail) ngoài
+ * media query, vì specificity của nó thắng cả @media và làm hỏng bố cục hẹp.
+ */
+
+/* Không để bất kỳ thứ gì tạo thanh cuộn ngang trên máy nhỏ */
+img,
+video {
+  max-width: 100%;
+}
+
+/* ---------- > 1280px: bố cục đầy đủ ---------- */
+
+@media (min-width: 1025px) {
+  /* Chỉ ở khổ này mới có cột phải, nên cũng chỉ ở đây mới cần bù chỗ khi trang
+     không dùng tới nó. Mốc phải khớp đúng với breakpoint ẩn cột phải bên dưới:
+     đặt lệch thì dải ở giữa sẽ chừa một cột trống 260px. */
+  .layout.no-rail {
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  }
+}
+
+/* ---------- 1025–1280px: laptop ---------- */
+
+@media (max-width: 1280px) {
+  :root {
+    --sidebar-w: 212px;
+    --rail-w: 260px;
+  }
+  .layout {
+    gap: 16px;
+    padding: 18px 16px 60px;
+  }
+  .card {
+    padding: 16px;
+  }
+}
+
+/* ---------- ≤ 1024px: tablet, bỏ cột phải ---------- */
+
+@media (max-width: 1024px) {
+  .layout {
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  }
+  .rail {
+    display: none;
+  }
+  .search {
+    max-width: none;
+  }
+}
+
+/* ---------- ≤ 860px: sidebar xuống đáy màn hình ---------- */
+
+@media (max-width: 860px) {
+  /* Liệt kê cả .layout.no-rail để thắng quy tắc hai lớp ở trên */
+  .layout,
+  .layout.no-rail {
+    grid-template-columns: minmax(0, 1fr);
+    /* Chừa chỗ cho thanh điều hướng cố định phía dưới */
+    padding: 14px 12px calc(84px + env(safe-area-inset-bottom));
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: auto 0 0 0;
+    top: auto;
+    z-index: 50;
+  }
+
+  .nav {
+    display: flex;
+    gap: 2px;
+    border-radius: 0;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    box-shadow: var(--shadow-lg);
+    /* Tài khoản staff có thêm 3 mục quản trị: cho cuộn ngang thay vì bóp nát */
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-item {
+    position: relative;
+    flex: 1 0 auto;
+    min-width: 52px;
+    justify-content: center;
+    padding: 6px 8px;
+  }
+
+  /* Chỉ ẩn nhãn chữ. Trước đây quy tắc là span:not(.glyph) nên nó ẩn luôn cả
+     huy hiệu đếm, làm mất hết thông báo chưa đọc trên mobile. */
+  .nav-label {
+    display: none;
+  }
+
+  .nav-item .pill {
+    position: absolute;
+    top: 2px;
+    right: 6px;
+    min-width: 16px;
+    height: 16px;
+    font-size: 10px;
+    padding: 0 4px;
+  }
+
+  .nav-section {
+    display: none;
+  }
+
+  /* Thanh trên cùng gọn lại nhường chỗ cho ô tìm kiếm */
+  .topbar {
+    gap: 10px;
+    padding: 0 12px;
+  }
+  .brand-text {
+    display: none;
+  }
+  .logout-text {
+    display: none;
+  }
+  .logout-btn {
+    width: 36px;
+    padding: 0;
+    border-radius: 50%;
+  }
+
+  .card {
+    padding: 14px;
+    border-radius: var(--radius);
+  }
+
+  .cover {
+    height: 140px;
+  }
+
+  /* Hộp thoại dán đáy màn hình như bottom sheet cho dễ với tay */
+  .modal-backdrop {
+    padding: 0;
+    place-items: end stretch;
+  }
+  .modal {
+    max-width: none;
+    max-height: 92dvh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  /* Bảng quản trị: giữ nguyên bề ngang và cho cuộn, đừng ép co cột */
+  .table {
+    min-width: 640px;
+  }
+  .table-wrap {
+    margin: 0 -14px;
+    padding: 0 14px;
+  }
+}
+
+/* Desktop hiện cả hai khung nên không cần nút quay lại. Khai báo TRƯỚC media
+ * query bên dưới: cùng specificity thì khai báo sau thắng, đặt sai chỗ là nút
+ * bị ẩn vĩnh viễn kể cả trên mobile. */
+.chat-back {
+  display: none;
+}
+
+/* ---------- ≤ 760px: trang tin nhắn còn một khung ---------- */
+
+@media (max-width: 760px) {
+  .messenger {
+    grid-template-columns: minmax(0, 1fr);
+    height: calc(100dvh - var(--topbar-h) - 98px - env(safe-area-inset-bottom));
+    border-radius: var(--radius);
+  }
+  .messenger.has-active .conv-pane {
+    display: none;
+  }
+  .messenger:not(.has-active) .chat-pane {
+    display: none;
+  }
+  /* Nút quay lại danh sách chỉ có nghĩa khi hai khung không cùng hiển thị */
+  .chat-back {
+    display: inline-flex;
+  }
+  .msg-stack {
+    max-width: 82%;
+  }
+}
+
+/* ---------- ≤ 560px: điện thoại ---------- */
+
+@media (max-width: 560px) {
+  body {
+    font-size: 13.5px;
+  }
+
+  .layout,
+  .layout.no-rail {
+    padding: 10px 10px calc(84px + env(safe-area-inset-bottom));
+    gap: 12px;
+  }
+
+  .main-col {
+    gap: 12px;
+  }
+
+  .card {
+    padding: 12px;
+  }
+
+  .topbar {
+    height: 58px;
+    padding: 0 10px;
+  }
+  .search input {
+    height: 38px;
+  }
+
+  /* Hàng nút trong thẻ hay dài hơn màn hình — cho phép xuống dòng */
+  .card-head,
+  .row-between {
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    height: 38px;
+    padding: 0 14px;
+  }
+  .btn-sm {
+    height: 30px;
+    padding: 0 11px;
+    font-size: 12.5px;
+  }
+
+  /* Ba tab dài (ví dụ trang tìm kiếm) không đủ chỗ nằm ngang */
+  .tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .tab {
+    flex: 1 0 auto;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  /* Một ảnh một hàng cho dễ nhìn thay vì hai ảnh bé xíu */
+  .post-media {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .post-action {
+    font-size: 12.5px;
+  }
+
+  .cover {
+    height: 116px;
+  }
+
+  .empty {
+    padding: 24px 12px;
+  }
+
+  .msg-stack {
+    max-width: 86%;
+  }
+  .chat-scroll,
+  .composer {
+    padding: 12px;
+  }
+}
+
+/* ───────────────── khối đầu trang cá nhân ───────────────── */
+
+/**
+ * Ảnh đại diện đè lên ảnh bìa. Dùng grid thay cho .row vì trên mobile khối này
+ * phải xuống hàng và căn giữa — .row (flex nowrap) làm tên bị vỡ chữ và các nút
+ * tràn ra ngoài màn hình.
+ */
+.profile-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-top: -42px;
+  padding-left: 18px;
+}
+
+.profile-avatar {
+  border: 4px solid var(--surface);
+  border-radius: 50%;
+  flex: none;
+}
+
+.profile-identity {
+  min-width: 0;
+  padding-bottom: 6px;
+}
+
+.profile-name {
+  font-weight: 800;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.profile-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .profile-head {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding-left: 0;
+    margin-top: -38px;
+    gap: 10px;
+  }
+  .profile-identity {
+    padding-bottom: 0;
+  }
+  .profile-identity .row {
+    justify-content: center;
+  }
+  .profile-actions {
+    justify-content: center;
+    padding-bottom: 0;
+    width: 100%;
+  }
+  .profile-name {
+    font-size: 18px;
+  }
+}
+
+/* ───────────────── trang đăng nhập / đăng ký ───────────────── */
+
+/* Dưới 900px bỏ nửa tranh minh hoạ, dành trọn màn hình cho biểu mẫu */
+@media (max-width: 900px) {
+  .auth {
+    grid-template-columns: minmax(0, 1fr);
+    /* 100dvh để thanh địa chỉ của trình duyệt di động không cắt mất nút submit */
+    min-height: 100dvh;
+  }
+  .auth-art {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .auth-form-wrap {
+    padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+    align-items: start;
+  }
+  .auth-art h1 {
+    font-size: 28px;
+  }
+}
+
+/* ───────────────────────── bình luận ─────────────────────────
+ *
+ * Hiển thị kiểu Facebook: đúng HAI tầng. Thụt lề bằng một đường kẻ dọc cố định
+ * thay vì padding cộng dồn theo độ sâu — nhờ vậy nhánh dài bao nhiêu cũng không
+ * đẩy nội dung ra khỏi màn hình, và vẫn hợp trên mobile.
+ */
+
+.comment-section {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.comment-count {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.comment-more {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-dim);
+}
+.comment-more:hover {
+  color: var(--brand-strong);
+}
+
+.comment-thread {
+  display: grid;
+  gap: 8px;
+}
+
+.comment-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.comment-bubble {
+  background: var(--surface-2);
+  border-radius: 14px;
+  padding: 7px 12px;
+  width: fit-content;
+  max-width: 100%;
+  word-break: break-word;
+}
+
+.comment-author {
+  font-weight: 650;
+  font-size: 12.5px;
+}
+
+.comment-text {
+  white-space: pre-wrap;
+}
+
+/* @tên người được trả lời — thứ giữ lại ngữ cảnh khi nhánh sâu bị kéo phẳng */
+.comment-mention {
+  color: var(--brand-strong);
+  font-weight: 700;
+  margin-right: 5px;
+}
+.comment-mention:hover {
+  text-decoration: underline;
+}
+
+.comment-image {
+  display: block;
+  max-width: 200px;
+  border-radius: 10px;
+  margin-top: 5px;
+}
+
+.comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 0 0 12px;
+}
+
+/* ---- khối phản hồi (tầng 2) ---- */
+
+.reply-block {
+  display: flex;
+  gap: 10px;
+  /* Canh thẳng hàng với avatar của bình luận gốc (32px + gap 8px) */
+  padding-left: 16px;
+}
+
+/**
+ * Đường kẻ dọc kiêm nút thu gọn: vùng bấm rộng 12px nhưng vạch chỉ 2px, để dễ
+ * trúng trên cảm ứng mà nhìn vẫn mảnh.
+ */
+.thread-line {
+  flex: 0 0 auto;
+  width: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  align-self: stretch;
+}
+
+.thread-line::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+
+.thread-line:hover::before {
+  background: var(--brand);
+}
+
+.reply-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.reply-more {
+  justify-self: start;
+}
+
+.comment-composer {
+  display: grid;
+  gap: 6px;
+}
+
+/* Chip "đang trả lời @ai" phía trên ô nhập */
+.reply-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-size: 12.5px;
+}
+
+/* Dòng tóm tắt lượt thích / bình luận nằm trên hàng nút */
+.post-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+
+@media (max-width: 560px) {
+  .reply-block {
+    padding-left: 8px;
+    gap: 6px;
+  }
+}
