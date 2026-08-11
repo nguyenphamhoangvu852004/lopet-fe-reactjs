@@ -36,14 +36,12 @@ describe("decodeToken", () => {
 
   it("giữ nguyên tiếng Việt có dấu trong payload", () => {
     const token = makeToken({ id: 1, email: "Nguyễn Văn Đức", roles: [] });
-    expect(decodeToken(token)?.email).toBe("Nguyễn Văn Đứ");
+    expect(decodeToken(token)?.email).toBe("Nguyễn Văn Đức");
   });
 
   it("roles thiếu hoặc sai kiểu thì thành mảng rỗng", () => {
     expect(decodeToken(makeToken({ id: 1 }))?.roles).toEqual([]);
-    expect(decodeToken(makeToken({ id: 1, roles: "ADMIN" }))?.roles).toEqual(
-      [],
-    );
+    expect(decodeToken(makeToken({ id: 1, roles: "ADMIN" }))?.roles).toEqual([]);
   });
 
   it("trả null với token rỗng, sai định dạng hoặc thiếu id", () => {
