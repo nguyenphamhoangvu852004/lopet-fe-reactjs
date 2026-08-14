@@ -86,6 +86,7 @@ export function AppShell({
     { to: "/", label: "Bảng tin", glyph: "🏠" },
     { to: "/friends", label: "Bạn bè", glyph: "👥", badge: pendingRequests },
     { to: "/groups", label: "Nhóm", glyph: "🧩" },
+    { to: "/pets", label: "Thú cưng", glyph: "🐾" },
     { to: "/messages", label: "Tin nhắn", glyph: "💬" },
     {
       to: "/notifications",

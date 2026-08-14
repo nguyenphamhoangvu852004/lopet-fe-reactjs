@@ -42,7 +42,6 @@ export function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
-  const [creatingProfile, setCreatingProfile] = useState(false);
   const [reporting, setReporting] = useState(false);
 
   const loadRelation = useCallback(async () => {
@@ -154,16 +153,12 @@ export function ProfilePage() {
           </div>
 
           <div className="profile-actions">
+            {/* Không còn nhánh "Tạo hồ sơ": mỗi tài khoản được backend cấp sẵn hồ sơ ngay khi
+                đăng ký, nên với chính chủ luôn chỉ có một hành động là sửa. */}
             {isMe ? (
-              account.profile ? (
-                <Button variant="outline" onClick={() => setEditing(true)}>
-                  Sửa hồ sơ
-                </Button>
-              ) : (
-                <Button onClick={() => setCreatingProfile(true)}>
-                  Tạo hồ sơ
-                </Button>
-              )
+              <Button variant="outline" onClick={() => setEditing(true)}>
+                Sửa hồ sơ
+              </Button>
             ) : (
               <>
                 {relation === "friend" && (
@@ -257,12 +252,6 @@ export function ProfilePage() {
           </div>
         )}
 
-        {isMe && !account.profile && (
-          <div className="alert alert-info" style={{ marginTop: 14 }}>
-            Tài khoản của bạn chưa có hồ sơ. Tạo hồ sơ để hiện tên, ảnh đại diện
-            và ảnh bìa.
-          </div>
-        )}
         <Alert>{error}</Alert>
       </Card>
 
@@ -305,25 +294,16 @@ export function ProfilePage() {
         ))
       )}
 
-      {isMe && account.profile && (
+      {isMe && (
         <ProfileFormModal
+          /* Remount khi hồ sơ đổi: state của form được khởi tạo từ prop nên nếu không remount,
+             lần mở sau vẫn giữ giá trị của lần nạp trước. */
+          key={account.profile?.id ?? "no-profile"}
           open={editing}
           profile={account.profile}
           onClose={() => setEditing(false)}
           onSaved={async () => {
             setEditing(false);
-            await refresh();
-            load();
-          }}
-        />
-      )}
-
-      {isMe && !account.profile && (
-        <ProfileFormModal
-          open={creatingProfile}
-          onClose={() => setCreatingProfile(false)}
-          onSaved={async () => {
-            setCreatingProfile(false);
             await refresh();
             load();
           }}
@@ -341,9 +321,14 @@ export function ProfilePage() {
 }
 
 /**
- * Tạo hồ sơ là HAI bước ở backend: POST /v1/profiles chỉ tạo bản ghi rời, phải
- * POST /v1/profiles/:id nữa mới gắn được vào tài khoản (accountId lấy từ token).
- * Sửa hồ sơ thì chỉ một bước PATCH.
+ * Sửa hồ sơ của chính người gọi: MỘT bước PUT /v1/profiles, không kèm id.
+ *
+ * Mô hình hai bước cũ (POST /v1/profiles tạo bản ghi rời → POST /v1/profiles/:id gắn vào tài
+ * khoản) đã bị bỏ ở backend: bước thứ hai không kiểm sở hữu nên gắn được hồ sơ của người khác
+ * vào tài khoản mình. Giờ hồ sơ được cấp sẵn lúc đăng ký và chỉ tra được bằng token.
+ *
+ * `profile` vẫn để optional cho tài khoản cũ chưa chạy backfill — khi đó form mở với giá trị
+ * rỗng và PUT sẽ trả lỗi của backend chỉ rõ cần backfill.
  */
 function ProfileFormModal({
   open,
@@ -352,11 +337,10 @@ function ProfileFormModal({
   onSaved,
 }: {
   open: boolean;
-  profile?: Profile;
+  profile?: Profile | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const editing = Boolean(profile);
   const [fullName, setFullName] = useState(profile?.fullName ?? "");
   const [bio, setBio] = useState(profile?.bio ?? "");
   const [phoneNumber, setPhoneNumber] = useState(profile?.phoneNumber ?? "");
@@ -389,12 +373,7 @@ function ProfileFormModal({
     setBusy(true);
     setError("");
     try {
-      if (profile) {
-        await profileApi.update(profile.id, buildForm());
-      } else {
-        const created = await profileApi.create(buildForm());
-        await profileApi.attachToAccount(created.id);
-      }
+      await profileApi.update(buildForm());
       onSaved();
     } catch (e) {
       setError(errorMessage(e));
@@ -406,7 +385,7 @@ function ProfileFormModal({
   return (
     <Modal
       open={open}
-      title={editing ? "Sửa hồ sơ" : "Tạo hồ sơ"}
+      title="Sửa hồ sơ"
       onClose={onClose}
       footer={
         <>

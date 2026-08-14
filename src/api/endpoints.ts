@@ -12,6 +12,9 @@ import type {
   MessageStatus,
   Notification,
   NotificationObjectType,
+  PetDetail,
+  PetInput,
+  PetListItem,
   Post,
   Profile,
   Report,
@@ -125,21 +128,26 @@ export const profileApi = {
   detail: (id: number) => api.get(`/v1/profiles/${id}`).then(unwrap<Profile>),
   byAccount: (accountId: number) =>
     api.get(`/v1/profiles/accounts/${accountId}`).then(unwrap<Profile>),
-  /** Chỉ chính chủ sửa được — backend chặn bằng requireOwnership */
-  update: (id: number, form: FormData) =>
-    api.patch(`/v1/profiles/${id}`, form, {
-      headers: { "Content-Type": "multipart/form-data" },
-    }),
-  /** Tạo hồ sơ rời; phải gọi attachToAccount sau đó mới gắn được vào tài khoản */
-  create: (form: FormData) =>
+
+  /** Hồ sơ của chính người gọi — accountId lấy từ token, client không cần biết profileId */
+  mine: () => api.get("/v1/profiles/me").then(unwrap<Profile>),
+
+  /**
+   * Cập nhật hồ sơ của chính người gọi.
+   *
+   * KHÔNG có path param: backend tra hồ sơ bằng accountId trong token, nên không có tham số nào
+   * để trỏ sang hồ sơ người khác. Cũng vì thế không còn API tạo hồ sơ — mỗi tài khoản được cấp
+   * sẵn một hồ sơ ngay khi đăng ký.
+   *
+   * Ngữ nghĩa merge: field không gửi thì giữ nguyên. Riêng avatar/cover CHỈ đổi khi form đính
+   * file thật — không đính file thì ảnh cũ được giữ lại (bản PATCH cũ xoá mất ảnh ở đúng chỗ này).
+   */
+  update: (form: FormData) =>
     api
-      .post("/v1/profiles", form, {
+      .put("/v1/profiles", form, {
         headers: { "Content-Type": "multipart/form-data" },
       })
       .then(unwrap<Profile>),
-  /** accountId lấy từ token ở backend, không gửi trong body */
-  attachToAccount: (profileId: number) =>
-    api.post(`/v1/profiles/${profileId}`).then(unwrap<Profile>),
 };
 
 /* ─────────────────────────── posts ─────────────────────────── */
@@ -207,6 +215,43 @@ export const commentApi = {
 };
 
 export type CommentPayload = Comment;
+
+/* ─────────────────────── pets ─────────────────────── */
+
+/**
+ * Khác mọi module còn lại, pets nhận **JSON** chứ không phải multipart — hồ sơ thú
+ * cưng chưa có ảnh đại diện ở bản này nên không cần FormData.
+ */
+export const petApi = {
+  /**
+   * KHÔNG nhận tham số userId: backend lấy danh tính từ token, không có endpoint
+   * dạng `/v1/pets?userId=`. Danh sách gồm cả những con mình chỉ là CO_OWNER.
+   */
+  mine: () =>
+    api
+      .get("/v1/pets/me")
+      .then(unwrap<PetListItem[]>)
+      .then((list) => list ?? []),
+
+  /** optionalAuth — hồ sơ PUBLIC xem được khi chưa đăng nhập; ngoài ra trả 404 */
+  detail: (petId: number) => api.get(`/v1/pets/${petId}`).then(unwrap<PetDetail>),
+
+  /** Người tạo tự động thành PRIMARY_OWNER; không gửi ownerId trong body */
+  create: (body: PetInput) => api.post("/v1/pets", body).then(unwrap<PetDetail>),
+
+  update: (petId: number, body: PetInput) =>
+    api.put(`/v1/pets/${petId}`, body).then(unwrap<PetDetail>),
+
+  /**
+   * Xoá MỀM: hồ sơ chuyển sang ARCHIVED và biến mất khỏi mọi luồng đọc, kể cả
+   * danh sách của chính chủ. Chỉ PRIMARY_OWNER gọi được — CO_OWNER nhận 403.
+   */
+  archive: (petId: number) =>
+    api
+      .delete(`/v1/pets/${petId}`)
+      .then(unwrap<{ petId: number; status: "ARCHIVED" }>),
+};
+
 
 /* ─────────────────────────── groups ────────────────────────── */
 
