@@ -13,6 +13,7 @@ import { FeedPage, SuggestionRail } from "./pages/Feed";
 import { FriendsPage, NotificationsPage } from "./pages/Friends";
 import { GroupDetailPage, GroupsPage } from "./pages/Groups";
 import { MessagesPage } from "./pages/Messages";
+import { PetDetailPage, PetsPage } from "./pages/Pets";
 import { PostDetailPage } from "./pages/PostDetail";
 import { ProfilePage } from "./pages/Profile";
 import { SearchPage } from "./pages/Search";
@@ -135,6 +136,24 @@ export default function App() {
         element={
           <Shell>
             <GroupDetailPage />
+          </Shell>
+        }
+      />
+      <Route
+        path="/pets"
+        element={
+          <Shell>
+            <PetsPage />
+          </Shell>
+        }
+      />
+      {/* Hồ sơ PUBLIC vẫn nằm sau RequireAuth: backend cho phép khách xem, nhưng app
+          này không có layout nào cho người chưa đăng nhập ngoài trang auth. */}
+      <Route
+        path="/pets/:id"
+        element={
+          <Shell>
+            <PetDetailPage />
           </Shell>
         }
       />

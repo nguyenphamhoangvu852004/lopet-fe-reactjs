@@ -115,6 +115,10 @@ export function LoginPage() {
 /**
  * Đăng ký gồm 3 bước vì backend bắt buộc xác thực OTP qua email trước:
  * gửi OTP → xác minh OTP → tạo tài khoản.
+ *
+ * Không có bước tạo hồ sơ: backend cấp sẵn hồ sơ trong chính transaction đăng ký, nên sau bước 3
+ * người dùng đã có hồ sơ và chỉ việc sửa ở trang cá nhân. Mô hình cũ (POST /v1/profiles tạo bản
+ * ghi rời rồi POST /v1/profiles/:id gắn vào tài khoản) đã bị bỏ ở backend.
  */
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -238,6 +242,10 @@ export function RegisterPage() {
               required
             />
           </div>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Hồ sơ cá nhân được tạo sẵn cùng tài khoản. Sau khi đăng nhập bạn có
+            thể đổi tên hiển thị, ảnh đại diện và ảnh bìa ở trang cá nhân.
+          </p>
           <Alert>{error}</Alert>
           <Button type="submit" disabled={busy} style={{ width: "100%" }}>
             Hoàn tất

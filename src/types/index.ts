@@ -218,3 +218,75 @@ export interface ApiEnvelope<T> {
   message: string;
   data: T;
 }
+
+/* ─────────────────────────── pets ──────────────────────────── */
+
+export type PetSpecies =
+  | "DOG"
+  | "CAT"
+  | "BIRD"
+  | "RABBIT"
+  | "HAMSTER"
+  | "FISH"
+  | "REPTILE"
+  | "OTHER";
+export type PetGender = "MALE" | "FEMALE" | "UNKNOWN";
+export type PetStatus = "ACTIVE" | "ARCHIVED";
+export type PetVisibility = "PUBLIC" | "FOLLOWERS" | "PRIVATE";
+export type PetOwnershipType = "PRIMARY_OWNER" | "CO_OWNER";
+
+/**
+ * Khớp PetDtos.PetDetail — khoá chính là `petId`, KHÔNG phải `id` (cùng quy ước
+ * với Post). Quan hệ sở hữu nằm ở bảng `pet_ownerships`, nên hồ sơ không có
+ * trường `ownerId`; backend suy ra `primaryOwnerId` khi trả về.
+ */
+export interface PetDetail {
+  petId: number;
+  name: string;
+  species: PetSpecies;
+  breed?: string | null;
+  gender: PetGender;
+  dateOfBirth: string;
+  bio?: string | null;
+  status: PetStatus;
+  visibility: PetVisibility;
+  /** Chỉ tài khoản này mới lưu trữ được hồ sơ; co-owner thì không */
+  primaryOwnerId?: number | null;
+  createdAt?: string;
+  updatedAt?: string | null;
+}
+
+/**
+ * Khớp PetDtos.PetListItem của GET /v1/pets/me. Không có `bio` và
+ * `primaryOwnerId`; bù lại có `myOwnershipType` = vai trò của chính người gọi.
+ */
+export interface PetListItem {
+  petId: number;
+  name: string;
+  species: PetSpecies;
+  breed?: string | null;
+  gender: PetGender;
+  dateOfBirth: string;
+  status: PetStatus;
+  visibility: PetVisibility;
+  myOwnershipType: PetOwnershipType;
+  createdAt?: string;
+  updatedAt?: string | null;
+}
+
+/**
+ * Body của POST/PUT /v1/pets. Cố ý KHÔNG có `ownerId`, `ownershipType`,
+ * `status`, `petId` hay các cột thời gian — backend quản lý chúng và DTO phía
+ * server cũng không khai, gửi thêm chỉ bị bỏ qua.
+ */
+export interface PetInput {
+  name: string;
+  species: PetSpecies;
+  breed?: string | null;
+  gender: PetGender;
+  /** Định dạng yyyy-MM-dd; backend từ chối ngày ở tương lai */
+  dateOfBirth: string;
+  bio?: string | null;
+  /** Bỏ trống thì backend mặc định PUBLIC */
+  visibility?: PetVisibility;
+}
