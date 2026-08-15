@@ -8,6 +8,7 @@ import type {
   Comment,
   FriendShipList,
   Group,
+  MarkStatusResult,
   Message,
   MessageStatus,
   Notification,
@@ -335,12 +336,52 @@ export const messageApi = {
     }),
   setStatus: (id: number, status: MessageStatus) =>
     api.patch(`/v1/messages/status/${id}`, { status }),
+  /**
+   * Ack "đã nhận" theo LÔ. Đường lui REST của sự kiện socket `message
+   * delivered`, dùng khi socket chưa kết nối (vừa mở lại app, mạng chập chờn).
+   *
+   * Id lạ không gây 403: backend lọc trong câu truy vấn, chỉ nhận tin có
+   * receiver đúng là người gọi và im lặng bỏ qua phần còn lại.
+   */
+  markDelivered: (messageIds: number[]) =>
+    api
+      .patch("/v1/messages/delivered", { messageIds })
+      .then(unwrap<MarkStatusResult>),
+  /**
+   * Đánh dấu đã xem CẢ hội thoại bằng một request — thay cho việc gọi
+   * `setStatus` cho từng tin, thứ vừa tốn n round-trip vừa làm backend bắn n
+   * sự kiện socket dội ngược về người gửi.
+   */
+  markConversationRead: (partnerId: number) =>
+    api
+      .patch("/v1/messages/read", null, { params: { partnerId } })
+      .then(unwrap<MarkStatusResult>),
+  /**
+   * Id những tin đang chờ mình ack "đã nhận" — trên MỌI hội thoại.
+   *
+   * Client gọi ngay sau khi socket kết nối để bù cho quãng offline: tin đến lúc
+   * đã đăng xuất không được socket nào chuyển tới, nên không có ack nào từng
+   * được phát và chúng kẹt ở "đã gửi".
+   */
+  pendingDelivery: () =>
+    api
+      .get("/v1/messages/pending-delivery")
+      .then(unwrap<number[]>)
+      .then((ids) => ids ?? []),
+  /** Badge tổng số tin chưa đọc, tính ở backend bằng một câu COUNT */
+  unreadCount: () =>
+    api
+      .get("/v1/messages/unread-count")
+      .then(unwrap<{ count: number }>)
+      .then((data) => data?.count ?? 0),
 };
 
 /* ─────────────────────── notifications ─────────────────────── */
 
 /** Payload socket dùng `objectType`, REST dùng `type` — quy về một trường */
-function normalizeNotification(raw: Notification & { objectType?: string }) {
+function normalizeNotification(
+  raw: Notification & { objectType?: NotificationObjectType },
+): Notification {
   return { ...raw, type: raw.type ?? raw.objectType };
 }
 
@@ -353,15 +394,11 @@ export const notificationApi = {
       .then((list) => (list ?? []).map(normalizeNotification)),
   detail: (id: number) =>
     api.get(`/v1/notifications/${id}`).then(unwrap<Notification>),
-  /** actorId lấy từ token; dùng để báo cho người khác biết có tương tác mới */
-  create: (
-    receptorId: number,
-    content: string,
-    objectType: NotificationObjectType,
-  ) =>
-    api
-      .post("/v1/notifications", { receptorId, content, objectType })
-      .then(unwrap<Notification>),
+  // `POST /v1/notifications` cố ý KHÔNG được gói ở đây nữa. Thông báo nay do
+  // backend tự sinh trong service của hành động tương ứng (thích bài, bình
+  // luận, nhắn tin, kết bạn) — kèm objectId để bấm vào mở được đúng chỗ, thứ mà
+  // client không thể tự gắn cho đúng. Gọi lại từ frontend là tạo ra thông báo
+  // mồ côi không dẫn đi đâu, nên đường đó bị bịt luôn ở tầng api.
   setStatus: (id: number, status: string) =>
     api.put(`/v1/notifications/${id}`, { status }),
 };

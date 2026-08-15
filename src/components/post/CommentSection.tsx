@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { errorMessage } from "../../api/client";
-import { commentApi, notificationApi } from "../../api/endpoints";
+import { commentApi } from "../../api/endpoints";
 import { useAuth } from "../../context/AuthContext";
 import type { Comment } from "../../types";
 import { Alert, Avatar, Button, timeAgo } from "../ui";
@@ -287,13 +287,11 @@ function ThreadView({
  */
 export function CommentSection({
   postId,
-  postAuthorId,
   variant,
   onCountChange,
   inputRef,
 }: {
   postId: number;
-  postAuthorId: number;
   variant: "preview" | "full";
   onCountChange?: (count: number) => void;
   inputRef?: React.RefObject<HTMLInputElement | null>;
@@ -354,15 +352,8 @@ export function CommentSection({
       setImage(null);
       if (fileRef.current) fileRef.current.value = "";
       await load();
-      if (postAuthorId !== user?.id) {
-        await notificationApi
-          .create(
-            postAuthorId,
-            `${user?.username ?? "Ai đó"} đã bình luận bài viết của bạn`,
-            "POST",
-          )
-          .catch(() => undefined);
-      }
+      // Thông báo cho chủ bài do backend tự bắn trong CommentService — kèm id bài
+      // viết để bấm vào mở được đúng chỗ, thứ mà lời gọi từ client không có.
     } catch (e) {
       setError(errorMessage(e));
     } finally {

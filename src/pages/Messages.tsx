@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { errorMessage, isForbidden } from "../api/client";
-import { friendApi, messageApi, notificationApi } from "../api/endpoints";
+import { friendApi, messageApi } from "../api/endpoints";
 import { Alert, Avatar, Badge, Button, EmptyState, Spinner } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { useRealtime } from "../context/RealtimeContext";
-import type { FriendEntry, Message } from "../types";
+import type { FriendEntry, Message, MessageStatus } from "../types";
 
 /**
  * Backend trả hội thoại theo `createdAt DESC` (MessageRepoImpl.getListMessage),
@@ -20,6 +20,26 @@ function sortAscending(list: Message[]): Message[] {
     // Cùng mốc thời gian (giây) thì id tăng dần phản ánh đúng thứ tự ghi
     return (a.id ?? 0) - (b.id ?? 0);
   });
+}
+
+/**
+ * Nâng trạng thái của một tin lên mức cao hơn, kèm mốc thời gian tương ứng.
+ * Không bao giờ hạ cấp: hai sự kiện tới ngược thứ tự vì mạng không được phép
+ * kéo "đã xem" lùi về "đã nhận".
+ */
+function upgrade(
+  message: Message,
+  status: MessageStatus,
+  at?: string | null,
+): Message {
+  if (STATUS_RANK[status] <= STATUS_RANK[message.status]) return message;
+  return {
+    ...message,
+    status,
+    ...(status === "READ"
+      ? { readAt: at ?? message.readAt }
+      : { deliveredAt: at ?? message.deliveredAt }),
+  };
 }
 
 function startOfDay(iso?: string) {
@@ -67,17 +87,50 @@ function shortTime(iso?: string) {
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 
+/** Bậc của vòng đời SENT → DELIVERED → READ; chỉ được đi lên, không đi xuống */
+const STATUS_RANK: Record<MessageStatus, number> = {
+  SENT: 0,
+  DELIVERED: 1,
+  READ: 2,
+};
+
+/**
+ * Nhãn dưới bong bóng tin của chính mình, theo đúng ba mức backend giữ trong
+ * cột `status`:
+ *
+ *   SENT      máy chủ đã nhận, nhưng thiết bị người kia thì chưa
+ *   DELIVERED tin đã tới một thiết bị đang mở của người kia
+ *   READ      người kia đã mở hội thoại và nhìn thấy
+ *
+ * Id âm là bong bóng lạc quan do `send()` dựng ra trước khi API trả về — chưa
+ * có bản ghi nào ở backend nên chưa có trạng thái nào để mà hiển thị.
+ */
+function statusLabel(message: Message): string {
+  if (message.id < 0) return "Đang gửi";
+  switch (message.status) {
+    case "READ":
+      return "Đã xem";
+    case "DELIVERED":
+      return "Đã nhận";
+    default:
+      return "Đã gửi";
+  }
+}
+
 interface Conversation {
   friend: FriendEntry;
   lastMessage?: Message;
   unread: number;
+  /** Tin người kia gửi cho mình, dùng để gom ack "đã nhận" thành một lô */
+  pending: Message[];
 }
 
 export function MessagesPage() {
   const { peerId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { connected, onMessage } = useRealtime();
+  const { connected, onMessage, onMessageStatus, ackDelivered, ackRead } =
+    useRealtime();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -97,6 +150,22 @@ export function MessagesPage() {
   // Người đang mở chat, giữ trong ref để handler socket không cần dựng lại
   const activeIdRef = useRef<number | null>(null);
   const stickToBottom = useRef(true);
+  /**
+   * Trạng thái đến qua socket, giữ lại theo id tin nhắn.
+   *
+   * Cần cái này vì sự kiện `message status` thường về TRƯỚC khi danh sách tin
+   * chứa tin vừa gửi: `send()` phải đợi `loadThread()` mới biết id thật, trong
+   * khi đối phương ack "đã nhận" chỉ sau vài chục ms. Sự kiện tới lúc đó không
+   * khớp được với tin nào trong state và sẽ mất luôn — còn `loadThread` thì có
+   * thể đọc trúng snapshot chụp trước lúc UPDATE commit, tức là trả về SENT.
+   * Kết quả: tin đứng mãi ở "Đã gửi" dù đối phương đã nhận.
+   *
+   * Nhớ ở đây rồi áp lại lên mọi danh sách nạp từ server thì thứ tự đến của hai
+   * đường (HTTP và socket) không còn quan trọng nữa.
+   */
+  const statusOverrides = useRef(
+    new Map<number, { status: MessageStatus; at?: string | null }>(),
+  );
 
   const activeId = peerId ? Number(peerId) : null;
   activeIdRef.current = activeId;
@@ -129,15 +198,30 @@ export function MessagesPage() {
             .conversation(friend.id)
             .catch(() => [] as Message[]);
           const ordered = sortAscending(thread);
+          const toMe = ordered.filter((m) => m.receiverId === user.id);
           return {
             friend,
             lastMessage: ordered[ordered.length - 1],
-            unread: ordered.filter(
-              (m) => m.receiverId === user.id && m.status !== "READ",
-            ).length,
+            unread: toMe.filter((m) => m.status !== "READ").length,
+            // Chỉ dùng để gom ack bên dưới, không hiển thị ở đâu cả
+            pending: toMe.filter((m) => m.id > 0),
           } satisfies Conversation;
         }),
       );
+
+      /**
+       * Ack "đã nhận" cho mọi tin còn SENT gửi tới mình, trên TẤT CẢ hội thoại
+       * chứ không riêng cái đang mở.
+       *
+       * Đây là đường bù cho khoảng thời gian offline: tin đến lúc app đóng thì
+       * không có socket nào nhận để mà ack tại chỗ, nên phải quét lại ở lần
+       * tải danh sách đầu tiên. Gộp thành MỘT request cho tất cả — backend
+       * nhận cả lô và chỉ bắn một sự kiện cho mỗi người gửi.
+       */
+      const chuaBaoNhan = rows.flatMap((row) =>
+        row.pending.filter((m) => m.status === "SENT").map((m) => m.id),
+      );
+      if (chuaBaoNhan.length > 0) ackDelivered(chuaBaoNhan);
 
       // Hội thoại có tin mới nhất lên đầu; người chưa từng nhắn xuống cuối
       rows.sort((a, b) => {
@@ -155,46 +239,66 @@ export function MessagesPage() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, ackDelivered]);
 
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
 
-  /** Đánh dấu đã đọc những tin do người kia gửi */
+  /**
+   * Đánh dấu đã xem những tin do người kia gửi.
+   *
+   * Một lời gọi cho CẢ hội thoại, không phải mỗi tin một request: backend có
+   * sẵn `PATCH /v1/messages/read?partnerId=` làm đúng việc đó trong một câu
+   * UPDATE, và chỉ bắn đúng một sự kiện socket về người gửi thay vì n cái.
+   */
   const markRead = useCallback(
-    async (list: Message[]) => {
-      const targets = list.filter(
-        (m) => m.id && m.receiverId === user?.id && m.status !== "READ",
+    (list: Message[]) => {
+      const partnerId = activeIdRef.current;
+      if (!partnerId || !user) return;
+      const chuaXem = list.some(
+        (m) => m.id > 0 && m.receiverId === user.id && m.status !== "READ",
       );
-      if (targets.length === 0) return;
-      await Promise.all(
-        targets.map((m) =>
-          messageApi.setStatus(m.id, "READ").catch(() => undefined),
-        ),
-      );
+      if (!chuaXem) return;
+
+      ackRead(partnerId);
+      // Cập nhật lạc quan: sự kiện `message status` chỉ quay về NGƯỜI GỬI, phía
+      // mình không nhận được gì để mà đợi.
       setMessages((current) =>
         current.map((m) =>
-          m.receiverId === user?.id ? { ...m, status: "READ" as const } : m,
+          m.receiverId === user.id && m.status !== "READ"
+            ? { ...m, status: "READ" as const, readAt: new Date().toISOString() }
+            : m,
         ),
       );
       setConversations((rows) =>
         rows.map((row) =>
-          row.friend.id === activeIdRef.current ? { ...row, unread: 0 } : row,
+          row.friend.id === partnerId ? { ...row, unread: 0 } : row,
         ),
       );
     },
-    [user],
+    [user, ackRead],
   );
 
   const loadThread = useCallback(
     async (targetId: number, silent = false) => {
       if (!silent) setLoadingThread(true);
       try {
-        const list = sortAscending(await messageApi.conversation(targetId));
+        const list = sortAscending(await messageApi.conversation(targetId)).map(
+          (m) => {
+            const pending = statusOverrides.current.get(m.id);
+            if (!pending) return m;
+            // Server đã bắt kịp thì bỏ override đi cho map khỏi phình theo phiên
+            if (STATUS_RANK[m.status] >= STATUS_RANK[pending.status]) {
+              statusOverrides.current.delete(m.id);
+              return m;
+            }
+            return upgrade(m, pending.status, pending.at);
+          },
+        );
         setMessages(list);
         setError("");
-        void markRead(list);
+        markRead(list);
       } catch (e) {
         setMessages([]);
         // 403 ở đây nghĩa là không phải một bên của hội thoại
@@ -234,6 +338,39 @@ export function MessagesPage() {
         void loadConversations();
       }),
     [onMessage, loadThread, loadConversations],
+  );
+
+  /**
+   * Trạng thái tin MÌNH đã gửi vừa đổi (đối phương nhận được, hoặc mở hội
+   * thoại ra xem). Vá thẳng vào state thay vì tải lại hội thoại: sự kiện đã
+   * mang đủ id, trạng thái mới và mốc thời gian, mà tải lại thì vừa tốn một
+   * request vừa làm khung chat nháy giữa lúc đang đọc.
+   *
+   * Không hạ cấp trạng thái ở đây — thứ tự SENT → DELIVERED → READ chỉ đi một
+   * chiều (backend giữ đúng luật đó trong MessageStatus.isAtLeast). Hai sự
+   * kiện tới ngược thứ tự vì mạng thì sự kiện cũ hơn phải bị bỏ qua, không
+   * được phép kéo "đã xem" lùi về "đã nhận".
+   */
+  useEffect(
+    () =>
+      onMessageStatus((event) => {
+        for (const id of event.messageIds) {
+          const known = statusOverrides.current.get(id);
+          if (!known || STATUS_RANK[event.status] > STATUS_RANK[known.status]) {
+            statusOverrides.current.set(id, {
+              status: event.status,
+              at: event.at,
+            });
+          }
+        }
+        const ids = new Set(event.messageIds);
+        setMessages((current) =>
+          current.map((m) =>
+            ids.has(m.id) ? upgrade(m, event.status, event.at) : m,
+          ),
+        );
+      }),
+    [onMessageStatus],
   );
 
   /**
@@ -327,16 +464,11 @@ export function MessagesPage() {
       form.append("receiverId", String(activeId));
       if (image) form.append("image", image);
       // senderId lấy từ token ở backend
+      // Thông báo cho người nhận do backend bắn trong MessageService.create,
+      // cùng transaction với chính tin nhắn
       await messageApi.send(form);
       await loadThread(activeId, true);
       void loadConversations();
-      await notificationApi
-        .create(
-          activeId,
-          `${user?.username ?? "Ai đó"} đã gửi cho bạn một tin nhắn`,
-          "MESSAGE",
-        )
-        .catch(() => undefined);
     } catch (e) {
       // Gỡ bong bóng lạc quan và trả nội dung về ô soạn để không mất chữ
       setMessages((list) => list.filter((m) => m.id !== optimistic.id));
@@ -552,11 +684,7 @@ export function MessagesPage() {
                                     {clockTime(message.createdAt)}
                                     {mine &&
                                       lastOwn?.id === message.id &&
-                                      (message.id < 0
-                                        ? " · Đang gửi"
-                                        : message.status === "READ"
-                                          ? " · Đã xem"
-                                          : " · Đã gửi")}
+                                      ` · ${statusLabel(message)}`}
                                   </div>
                                 )}
                               </div>

@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { errorMessage, isForbidden } from "../api/client";
-import {
-  accountApi,
-  friendApi,
-  notificationApi,
-  postApi,
-  profileApi,
-} from "../api/endpoints";
+import { accountApi, friendApi, postApi, profileApi } from "../api/endpoints";
 import { PostCard } from "../components/post/PostCard";
 import { ReportDialog } from "../components/report/ReportDialog";
 import {
@@ -201,14 +195,8 @@ export function ProfilePage() {
                   <Button
                     onClick={() =>
                       act(async () => {
+                        // Thông báo do backend bắn trong FriendshipService
                         await friendApi.request(accountId);
-                        await notificationApi
-                          .create(
-                            accountId,
-                            `${user?.username ?? "Ai đó"} đã gửi cho bạn lời mời kết bạn`,
-                            "POST",
-                          )
-                          .catch(() => undefined);
                       })
                     }
                   >

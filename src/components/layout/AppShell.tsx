@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { friendApi, notificationApi } from "../../api/endpoints";
+import { friendApi } from "../../api/endpoints";
 import { useAuth } from "../../context/AuthContext";
-import { useRealtime } from "../../context/RealtimeContext";
 import { Avatar, Button } from "../ui";
+import { NotificationBell } from "./NotificationBell";
 
 const THEME_KEY = "lopet:theme";
 
@@ -59,28 +59,21 @@ export function AppShell({
   rail?: ReactNode;
 }) {
   const { user, logout, can } = useAuth();
-  const { unreadNotifications, liveNotifications } = useRealtime();
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [pendingRequests, setPendingRequests] = useState(0);
-  const [storedUnread, setStoredUnread] = useState(0);
 
-  // Số liệu cho huy hiệu điều hướng. Tải một lần khi vào app; phần realtime do
-  // RealtimeContext cộng thêm nên không cần polling.
+  // Huy hiệu lời mời kết bạn. Tải một lần khi vào app — không có kênh realtime
+  // cho lời mời nên cũng không có gì để cộng thêm.
+  // Huy hiệu thông báo đã chuyển sang <NotificationBell> cùng dữ liệu của nó.
   useEffect(() => {
     if (!user) return;
     friendApi
       .received(user.id)
       .then((data) => setPendingRequests(data?.others?.length ?? 0))
       .catch(() => setPendingRequests(0));
-    notificationApi
-      .mine(user.id)
-      .then((list) =>
-        setStoredUnread(list.filter((n) => n.status !== "READ").length),
-      )
-      .catch(() => setStoredUnread(0));
-  }, [user, liveNotifications.length]);
+  }, [user]);
 
   const mainNav: NavEntry[] = [
     { to: "/", label: "Bảng tin", glyph: "🏠" },
@@ -88,12 +81,8 @@ export function AppShell({
     { to: "/groups", label: "Nhóm", glyph: "🧩" },
     { to: "/pets", label: "Thú cưng", glyph: "🐾" },
     { to: "/messages", label: "Tin nhắn", glyph: "💬" },
-    {
-      to: "/notifications",
-      label: "Thông báo",
-      glyph: "🔔",
-      badge: storedUnread + unreadNotifications,
-    },
+    // "Thông báo" không còn ở đây: nó là cái chuông trên thanh header. Route
+    // /notifications vẫn sống để panel dẫn sang bản đầy đủ.
     { to: "/advertiser", label: "Nhà quảng cáo", glyph: "📣" },
     { to: "/settings", label: "Cài đặt", glyph: "⚙️" },
   ];
@@ -128,6 +117,7 @@ export function AppShell({
         </form>
 
         <div className="topbar-actions">
+          <NotificationBell />
           <Button variant="icon" onClick={toggle} title="Đổi giao diện">
             {theme === "light" ? "🌙" : "☀️"}
           </Button>

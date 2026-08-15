@@ -150,9 +150,50 @@ export interface Message {
   mediaUrl?: string;
   status: MessageStatus;
   createdAt?: string;
+  /** Mốc tin tới được thiết bị người nhận; null khi chưa xảy ra */
+  deliveredAt?: string | null;
+  /** Mốc người nhận mở hội thoại và nhìn thấy tin; null khi chưa xảy ra */
+  readAt?: string | null;
 }
 
-export type NotificationObjectType = "POST" | "MESSAGE";
+export interface MarkStatusResult {
+  /** Số tin thật sự đổi trạng thái — 0 nghĩa là tất cả đã ở trạng thái đó rồi */
+  updated: number;
+  status: MessageStatus;
+}
+
+/**
+ * Sự kiện socket `message status` do backend đẩy NGƯỢC về người gửi
+ * (message/MessageStatusNotifier). Gộp theo người gửi nên một lần đối phương
+ * mở hội thoại chỉ tốn đúng một sự kiện, kèm danh sách id chứ không phải một
+ * sự kiện cho mỗi tin.
+ *
+ * `byUserId` là người vừa nhận/xem — dùng để bỏ qua sự kiện do chính mình gây
+ * ra khi mở hai tab cùng một tài khoản.
+ */
+export interface MessageStatusEvent {
+  messageIds: number[];
+  status: MessageStatus;
+  at?: string | null;
+  byUserId: number;
+}
+
+/**
+ * Loại thông báo — hợp đồng với backend
+ * (notification/entity/NotificationObjectType.java). Quyết định biểu tượng và
+ * ĐÍCH ĐIỀU HƯỚNG khi người dùng bấm vào, xem `notificationTarget()`.
+ *
+ * `POST` là loại CŨ: hồi frontend tự tạo thông báo, cả bốn sự kiện khác nhau
+ * đều bị nhét vào giá trị này và không kèm id đối tượng nào. Chỉ còn để đọc dữ
+ * liệu cũ; thông báo loại đó hiện ra được nhưng không dẫn đi đâu.
+ */
+export type NotificationObjectType =
+  | "POST_LIKE"
+  | "POST_COMMENT"
+  | "MESSAGE"
+  | "FRIEND_REQUEST"
+  | "FRIEND_ACCEPTED"
+  | "POST";
 export type NotificationStatus = "SENT" | "DELIVERED" | "READ";
 
 /**
@@ -166,7 +207,13 @@ export interface Notification {
   receptorId?: number;
   content: string;
   status?: NotificationStatus | string;
-  type?: string;
+  type?: NotificationObjectType;
+  /**
+   * Id của đối tượng được nói tới — bài viết, tin nhắn, hoặc người liên quan,
+   * tuỳ `type`. Vắng mặt ở thông báo cũ, nên mọi chỗ đọc nó phải chịu được
+   * undefined thay vì coi như luôn có.
+   */
+  objectId?: number | null;
   createdAt?: string;
 }
 

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { errorMessage } from "../../api/client";
-import { notificationApi, postApi } from "../../api/endpoints";
+import { postApi } from "../../api/endpoints";
 import { useAuth } from "../../context/AuthContext";
 import { useAccountLite } from "../../hooks/useAccountLite";
 import type { Post, PostScope } from "../../types";
@@ -210,17 +210,9 @@ export function PostCard({
     setLikes((n) => Math.max(0, n + (next ? 1 : -1)));
     try {
       if (next) {
+        // Backend tự báo cho chủ bài trong PostService.like, và tự bỏ qua khi
+        // người thích chính là chủ bài
         await postApi.like(post.postId);
-        // Báo cho chủ bài biết, trừ khi tự thích bài của chính mình
-        if (!isMine) {
-          await notificationApi
-            .create(
-              post.accountId,
-              `${user?.username ?? "Ai đó"} đã thích bài viết của bạn`,
-              "POST",
-            )
-            .catch(() => undefined);
-        }
       } else {
         await postApi.unlike(post.postId);
       }
@@ -345,7 +337,6 @@ export function PostCard({
 
       <CommentSection
         postId={post.postId}
-        postAuthorId={post.accountId}
         variant={variant}
         onCountChange={setCommentCount}
         inputRef={commentInputRef}

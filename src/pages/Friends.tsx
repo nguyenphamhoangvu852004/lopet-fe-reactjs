@@ -3,6 +3,10 @@ import { Link } from "react-router-dom";
 import { errorMessage, isForbidden } from "../api/client";
 import { friendApi, notificationApi } from "../api/endpoints";
 import {
+  notificationHref,
+  notificationKind,
+} from "../notifications/registry";
+import {
   Alert,
   Avatar,
   Badge,
@@ -100,14 +104,8 @@ export function FriendsPage() {
                     size="sm"
                     onClick={() =>
                       act(async () => {
+                        // Thông báo do backend bắn trong FriendshipService
                         await friendApi.accept(friend.id);
-                        await notificationApi
-                          .create(
-                            friend.id,
-                            `${user?.username ?? "Ai đó"} đã chấp nhận lời mời kết bạn`,
-                            "POST",
-                          )
-                          .catch(() => undefined);
                       })
                     }
                   >
@@ -152,11 +150,6 @@ export function FriendsPage() {
   );
 }
 
-const NOTIFICATION_GLYPH: Record<string, string> = {
-  POST: "📝",
-  MESSAGE: "💬",
-};
-
 export function NotificationsPage() {
   const { user } = useAuth();
   const { liveNotifications, clearNotificationBadge } = useRealtime();
@@ -185,9 +178,13 @@ export function NotificationsPage() {
   // Vào trang là coi như đã xem hết phần đếm ở thanh điều hướng
   useEffect(() => clearNotificationBadge(), [clearNotificationBadge]);
 
-  // Thông báo đến qua socket chưa có notificationId nên chỉ hiện, không có nút
-  // đánh dấu đã đọc; tải lại trang sẽ lấy bản chính thức từ REST.
-  const live = liveNotifications.filter((n) => !n.notificationId);
+  // Thông báo đến qua socket nay CÓ notificationId, nên bản REST tải lại phía
+  // trên đã bao trọn chúng. Chỉ giữ lại cái nào chưa kịp có mặt trong danh sách
+  // đó, tránh hiện hai lần cùng một thông báo.
+  const known = new Set(items.map((n) => n.notificationId));
+  const live = liveNotifications.filter(
+    (n) => !n.notificationId || !known.has(n.notificationId),
+  );
 
   async function markRead(id: number) {
     try {
@@ -242,7 +239,7 @@ export function NotificationsPage() {
           {live.map((n, index) => (
             <div key={`live-${index}`} className="row">
               <div className="glyph" style={{ fontSize: 18 }}>
-                {NOTIFICATION_GLYPH[n.type ?? ""] ?? "🔔"}
+                {notificationKind(n).glyph}
               </div>
               <div className="grow">
                 <div>{n.content}</div>
@@ -260,33 +257,49 @@ export function NotificationsPage() {
         <EmptyState icon="🔔" title="Chưa có thông báo" />
       ) : (
         <div className="stack">
-          {items.map((n) => (
-            <div
-              key={n.notificationId}
-              className="row"
-              style={{ opacity: n.status === "READ" ? 0.6 : 1 }}
-            >
-              <div className="glyph" style={{ fontSize: 18 }}>
-                {NOTIFICATION_GLYPH[n.type ?? ""] ?? "🔔"}
-              </div>
-              <div className="grow">
-                <div>{n.content}</div>
-                <div className="faint">
-                  {timeAgo(n.createdAt)}
-                  {n.actorId ? ` · từ #${n.actorId}` : ""}
+          {items.map((n) => {
+            const kind = notificationKind(n);
+            const href = notificationHref(n);
+            return (
+              <div
+                key={n.notificationId}
+                className="row"
+                style={{ opacity: n.status === "READ" ? 0.6 : 1 }}
+              >
+                <div className="glyph" style={{ fontSize: 18 }}>
+                  {kind.glyph}
                 </div>
+                <div className="grow">
+                  {/* Cùng đích đến với panel chuông — cả hai đọc chung
+                      notifications/registry, nên không thể lệch nhau */}
+                  {href ? (
+                    <Link
+                      to={href}
+                      onClick={() => {
+                        if (n.status !== "READ") void markRead(n.notificationId);
+                      }}
+                    >
+                      {n.content}
+                    </Link>
+                  ) : (
+                    <div>{n.content}</div>
+                  )}
+                  <div className="faint">
+                    {timeAgo(n.createdAt)} · {kind.label}
+                  </div>
+                </div>
+                {n.status !== "READ" && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => markRead(n.notificationId)}
+                  >
+                    Đánh dấu đã đọc
+                  </Button>
+                )}
               </div>
-              {n.status !== "READ" && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => markRead(n.notificationId)}
-                >
-                  Đánh dấu đã đọc
-                </Button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </Card>
