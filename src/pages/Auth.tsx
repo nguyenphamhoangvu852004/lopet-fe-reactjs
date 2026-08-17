@@ -24,9 +24,9 @@ function AuthLayout({
           >
             🐾
           </span>
-          Lopet
+          Lopet - Mạng xã hội cho người yêu thú cưng
         </div>
-        <h1>Mạng xã hội cho người yêu thú cưng</h1>
+        <h1>Hiện thực hoá đời sống thú cưng</h1>
         <p style={{ opacity: 0.9, maxWidth: 420 }}>
           Chia sẻ khoảnh khắc, lập nhóm cộng đồng, kết nối với những người nuôi
           thú cưng quanh bạn.
