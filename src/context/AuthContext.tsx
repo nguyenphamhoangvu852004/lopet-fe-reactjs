@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import {
+  endSession,
+  ensureFreshSession,
   REFRESH_KEY,
   SESSION_EXPIRED,
   TOKEN_KEY,
@@ -92,17 +94,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /**
+   * Access token chỉ sống 1 giờ, nên mở lại tab sau một buổi là readStoredUser()
+   * trả về null dù phiên vẫn còn hạn (refresh token sống 10 giờ). Phải gia hạn
+   * TRƯỚC rồi mới đọc, nếu không người dùng bị đá ra đăng nhập lại một cách vô
+   * cớ — đúng thứ mà cơ chế refresh sinh ra để tránh.
+   */
   useEffect(() => {
-    const stored = readStoredUser();
-    if (stored) {
-      hydrate(stored).finally(() => setReady(true));
-    } else {
-      setReady(true);
-    }
+    let cancelled = false;
+
+    ensureFreshSession().finally(() => {
+      if (cancelled) return;
+      const stored = readStoredUser();
+      if (stored) {
+        setUser(stored);
+        hydrate(stored).finally(() => setReady(true));
+      } else {
+        setUser(null);
+        setReady(true);
+      }
+    });
 
     const onExpired = () => setUser(null);
     window.addEventListener(SESSION_EXPIRED, onExpired);
-    return () => window.removeEventListener(SESSION_EXPIRED, onExpired);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(SESSION_EXPIRED, onExpired);
+    };
   }, [hydrate]);
 
   const login = useCallback(
@@ -125,10 +143,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [hydrate],
   );
 
+  /**
+   * Dùng chung endSession() với interceptor để đăng xuất thủ công và phiên hết
+   * hạn dọn đúng một bộ trạng thái — trước đây bản ở đây quên xoá activePetId,
+   * nên người đăng nhập kế tiếp gửi X-Pet-Id của người trước và nhận 403.
+   */
   const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_KEY);
-    localStorage.removeItem(USER_KEY);
+    endSession();
     setUser(null);
   }, []);
 

@@ -15,7 +15,7 @@ import {
   Tabs,
 } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
-import { prefetchAccounts } from "../hooks/useAccountLite";
+import { prefetchPetProfiles } from "../hooks/usePetProfileLite";
 import type { Account, Advertisement, Group, Post } from "../types";
 
 type FeedTab = "latest" | "suggest";
@@ -151,8 +151,9 @@ export function FeedPage() {
     try {
       const list =
         tab === "suggest" ? await postApi.suggest() : await postApi.feed();
-      // Bài viết chỉ mang accountId — nạp trước tác giả để card không nhấp nháy
-      prefetchAccounts(list.map((post) => post.accountId));
+      // Bài viết chỉ mang petId — nạp trước hồ sơ thú cưng tác giả để card
+      // không nhấp nháy khi hiện tên và ảnh
+      prefetchPetProfiles(list.map((post) => post.petId));
       setPosts(list);
       setError("");
     } catch (e) {

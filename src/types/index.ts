@@ -56,21 +56,35 @@ export interface PostMedia {
   mediaType: "IMAGE" | "VIDEO";
 }
 
-export interface PostAuthorLite {
-  id: number;
-  username: string;
-  email?: string;
+/**
+ * Người thả tim — khớp `PostDtos.LikedPet`. Backend đã bỏ username/email khỏi
+ * danh sách này: nó là chỗ ai cũng đọc được, nên không để lộ tài khoản đứng
+ * sau con vật.
+ */
+export interface LikedPet {
+  petId: number;
+  handle: string;
+  displayName: string;
+  avatarUrl?: string;
 }
 
 /**
- * Khớp GetPostOutputDTO — khoá chính là `postId`, KHÔNG phải `id`.
+ * Khớp `PostDtos.PostListItem` — khoá chính là `postId`, KHÔNG phải `id`.
  *
- * Lưu ý: GetPostByAccountIdOutputDTO của backend không có trường `accountId`,
- * nên khi lấy bài theo tài khoản phải tự gắn lại ở tầng api (xem endpoints.ts).
+ * TÁC GIẢ LÀ THÚ CƯNG: cột `posts.account_id` đã thành `posts.pet_id`, nên DTO
+ * mang `petId` chứ không còn `accountId`. `petId` là id trong bảng `pets`,
+ * KHÔNG phải `pet_profiles.id` — hồ sơ công khai đổi và khoá được, còn khoá
+ * ngoại phải trỏ vào một danh tính bất biến.
+ *
+ * `petId` có thể null với dữ liệu cũ chưa di trú xong (backend giữ lại bài và
+ * để `pet_id` rỗng thay vì xoá nội dung người dùng đã viết).
+ *
+ * Lưu ý: `PostByAccountItem` của backend không có `petId`, nên khi lấy bài theo
+ * pet/tài khoản phải tự gắn lại ở tầng api (xem endpoints.ts).
  */
 export interface Post {
   postId: number;
-  accountId: number;
+  petId?: number | null;
   content: string;
   groupId?: number | null;
   postType?: PostType;
@@ -78,21 +92,34 @@ export interface Post {
   postMedias?: PostMedia[];
   likeAmount: number;
   /** Chỉ GET /v1/posts trả về; bản chi tiết dùng `listLike` */
-  likeList?: PostAuthorLite[];
-  listLike?: PostAuthorLite[];
+  likeList?: LikedPet[];
+  listLike?: LikedPet[];
   commentAmount?: number;
   shareAmount?: number;
   createdAt?: string;
   updatedAt?: string | null;
 }
 
-/** Khớp CommentOutputDTO — tác giả nằm trong `account`, nội dung là `content` */
+/**
+ * Tác giả bình luận — khớp `CommentDtos.CommentPet`. `name` là tên thật của con
+ * vật (`pets.name`), khác `profile.displayName` là tên hiện ra ngoài.
+ */
+export interface CommentPet {
+  id: number;
+  name: string;
+  profile: PetProfileSummary & { id: number };
+}
+
+/**
+ * Khớp `CommentDtos.CommentItem` — tác giả nằm trong `pet` (trước là `account`),
+ * nội dung là `content`.
+ */
 export interface Comment {
   id: number;
   content: string;
   imageUrl?: string;
   replyToCommentId?: number;
-  account?: Account;
+  pet?: CommentPet;
   createdAt?: string;
 }
 
@@ -105,13 +132,52 @@ export interface CommentBundle {
 export type GroupType = "PUBLIC" | "PRIVATE";
 export type GroupMemberRole = "OWNER" | "ADMIN" | "MEMBER";
 
-/** GET /v1/groups/:id trả entity Groups kèm quan hệ members */
+/**
+ * Trạng thái một hàng `group_members`. "Tồn tại hàng" KHÔNG còn nghĩa là thành
+ * viên: một yêu cầu xin vào hoặc một lời mời chưa trả lời cũng là một hàng ở đây
+ * với `PENDING`.
+ */
+export type GroupMemberStatus = "PENDING" | "ACTIVE";
+
+/**
+ * Quan hệ của THÚ CƯNG ĐANG THAO TÁC với nhóm — backend tính sẵn từ `X-Pet-Id`
+ * nên giao diện không phải tự suy từ danh sách thành viên (và không suy được, vì
+ * danh sách bị che ở nhóm riêng tư).
+ *
+ * `NONE` gộp cả khách chưa đăng nhập và người chưa chọn thú cưng: cả ba trường
+ * hợp đều "chưa dính gì tới nhóm này".
+ */
+export type GroupViewerStatus =
+  | "NONE"
+  | "PENDING_REQUEST"
+  | "PENDING_INVITE"
+  | "MEMBER";
+
+/**
+ * Thành viên nhóm — khớp `GroupDtos.GroupMemberView`.
+ *
+ * THÀNH VIÊN LÀ THÚ CƯNG: khoá chính của `group_members` đã đổi từ
+ * `(group_id, account_id)` sang `(group_id, pet_id)`. Hệ quả có chủ đích: một
+ * người có nhiều thú cưng thì mỗi con vào nhóm riêng, và vai trò OWNER/ADMIN
+ * gắn vào con vật đang hoạt động chứ không vào người đứng sau nó.
+ */
 export interface GroupMember {
   groupId: number;
-  accountId: number;
+  petId: number;
   role: GroupMemberRole;
+  /** `joinedAt` là lúc thành viên BẮT ĐẦU thật — hàng chờ được đóng dấu lại khi duyệt */
   joinedAt?: string;
-  account?: { id: number; username?: string; profile?: Profile | null };
+  /**
+   * Rỗng (các chuỗi "") khi con vật đã ngừng hoạt động: hàng thành viên vẫn còn
+   * nhưng backend lọc pet đã xoá mềm khỏi kết quả nạp.
+   */
+  pet?: {
+    petId: number | null;
+    name: string;
+    handle: string;
+    displayName: string;
+    avatarUrl: string;
+  };
 }
 
 export interface Group {
@@ -120,11 +186,45 @@ export interface Group {
   type: GroupType;
   bio?: string;
   coverUrl?: string;
-  ownerId?: number;
-  owner?: number;
+  /** Id THÚ CƯNG làm chủ nhóm; backend trả 0 khi nhóm không có bản ghi OWNER */
+  ownerPetId?: number;
+  /**
+   * LUÔN là số thành viên ACTIVE thật, kể cả khi `members` bị che — dùng khoá này
+   * chứ không phải `members.length` để hiển thị số đếm.
+   */
   totalMembers?: number;
   members?: GroupMember[];
+  /**
+   * Nhóm riêng tư và người xem không phải thành viên: `members` bị rút thành mảng
+   * rỗng. Phải đọc cờ này chứ không suy từ `members.length === 0` — một nhóm công
+   * khai chưa ai vào cũng cho danh sách rỗng.
+   */
+  restricted?: boolean;
+  viewerStatus?: GroupViewerStatus;
   createdAt?: string;
+}
+
+/** Một thú cưng đang chờ quản trị nhóm duyệt — khớp `GroupDtos.PendingMemberView` */
+export interface GroupJoinRequest {
+  groupId: number;
+  petId: number;
+  pet?: GroupMember["pet"];
+  requestedAt?: string;
+}
+
+/**
+ * Một lời mời đang chờ chính thú cưng được mời trả lời — khớp
+ * `GroupDtos.PendingInviteView`. Kèm tên nhóm nên hộp thư mời không phải gọi thêm
+ * một vòng chi tiết nhóm cho từng dòng.
+ */
+export interface GroupInvite {
+  groupId: number;
+  groupName: string;
+  groupType: GroupType;
+  petId: number;
+  /** Rỗng nếu thú cưng đã mời sau đó ngừng hoạt động */
+  invitedBy?: GroupMember["pet"];
+  invitedAt?: string;
 }
 
 /** Backend đã bỏ `email` khỏi DTO bạn bè — không khôi phục. */
@@ -193,6 +293,10 @@ export type NotificationObjectType =
   | "MESSAGE"
   | "FRIEND_REQUEST"
   | "FRIEND_ACCEPTED"
+  | "GROUP_JOIN_REQUESTED"
+  | "GROUP_JOIN_APPROVED"
+  | "GROUP_INVITED"
+  | "GROUP_INVITE_ACCEPTED"
   | "POST";
 export type NotificationStatus = "SENT" | "DELIVERED" | "READ";
 
@@ -215,6 +319,29 @@ export interface Notification {
    */
   objectId?: number | null;
   createdAt?: string;
+}
+
+/**
+ * Hồ sơ nhúng trong thông báo — khớp `NotificationDtos.NotificationProfile`.
+ * Lấy từ `pet_profiles` chứ không còn từ hồ sơ tài khoản: nội dung dẫn tới từ
+ * thông báo đều do thú cưng tạo ra. Tài khoản có nhiều thú cưng thì backend
+ * chọn con có id nhỏ nhất.
+ */
+export interface NotificationProfile {
+  id?: number;
+  handle?: string;
+  displayName?: string;
+  bio?: string;
+  avatarUrl?: string;
+  coverUrl?: string;
+}
+
+/** Actor/receptor của thông báo vẫn là TÀI KHOẢN — hộp thông báo thuộc về người */
+export interface NotificationAccount {
+  id: number;
+  username: string;
+  email?: string;
+  profile?: NotificationProfile;
 }
 
 export type ReportType = "USER" | "GROUP" | "POST";
@@ -278,15 +405,31 @@ export type PetSpecies =
   | "REPTILE"
   | "OTHER";
 export type PetGender = "MALE" | "FEMALE" | "UNKNOWN";
-export type PetStatus = "ACTIVE" | "ARCHIVED";
+/** Xoá là xoá MỀM — không có giá trị "DELETED" vì nội dung vẫn trỏ tới pets.id */
+export type PetStatus = "ACTIVE" | "DEACTIVATED";
+export type PetProfileStatus = "ACTIVE" | "DEACTIVATED";
 export type PetVisibility = "PUBLIC" | "FOLLOWERS" | "PRIVATE";
-export type PetOwnershipType = "PRIMARY_OWNER" | "CO_OWNER";
 
 /**
- * Khớp PetDtos.PetDetail — khoá chính là `petId`, KHÔNG phải `id` (cùng quy ước
- * với Post). Quan hệ sở hữu nằm ở bảng `pet_ownerships`, nên hồ sơ không có
- * trường `ownerId`; backend suy ra `primaryOwnerId` khi trả về.
+ * Mô hình chia làm hai bảng và giao diện phải tôn trọng ranh giới đó:
+ *
+ *  - `Pet` (bảng `pets`) giữ dữ liệu SINH HỌC và quyền sở hữu: loài, giống,
+ *    ngày sinh, giới tính, chủ. Chỉ chủ đọc đầy đủ.
+ *  - `PetProfile` (bảng `pet_profiles`) là MẶT CÔNG KHAI: handle, displayName,
+ *    avatar, cover, bio, visibility. Đây là thứ người lạ nhìn thấy.
+ *
+ * Vì thế `bio`/`visibility`/`avatarUrl` KHÔNG còn nằm trên `PetDetail` như bản
+ * trước — chúng ở trong `profile`.
  */
+export interface PetProfileSummary {
+  handle: string;
+  displayName: string;
+  avatarUrl?: string | null;
+  bio?: string | null;
+  visibility: PetVisibility;
+}
+
+/** Khớp `PetDtos.PetDetail` — khoá chính là `petId`, KHÔNG phải `id` */
 export interface PetDetail {
   petId: number;
   name: string;
@@ -294,18 +437,17 @@ export interface PetDetail {
   breed?: string | null;
   gender: PetGender;
   dateOfBirth: string;
-  bio?: string | null;
   status: PetStatus;
-  visibility: PetVisibility;
-  /** Chỉ tài khoản này mới lưu trữ được hồ sơ; co-owner thì không */
-  primaryOwnerId?: number | null;
+  /** Chủ sở hữu; quan hệ 1-N trực tiếp qua `pets.account_id`, không còn bảng nối */
+  ownerAccountId?: number | null;
+  profile: PetProfileSummary;
   createdAt?: string;
   updatedAt?: string | null;
 }
 
 /**
- * Khớp PetDtos.PetListItem của GET /v1/pets/me. Không có `bio` và
- * `primaryOwnerId`; bù lại có `myOwnershipType` = vai trò của chính người gọi.
+ * Khớp `PetDtos.PetListItem` của GET /v1/pets/me. Không có `ownerAccountId`:
+ * danh sách này luôn là của chính người gọi.
  */
 export interface PetListItem {
   petId: number;
@@ -315,16 +457,33 @@ export interface PetListItem {
   gender: PetGender;
   dateOfBirth: string;
   status: PetStatus;
-  visibility: PetVisibility;
-  myOwnershipType: PetOwnershipType;
+  profile: PetProfileSummary;
   createdAt?: string;
   updatedAt?: string | null;
 }
 
+/** Hồ sơ như người NGOÀI nhìn thấy — `PetProfileDtos.PublicPetProfile` */
+export interface PublicPetProfile {
+  petId: number;
+  handle: string;
+  displayName: string;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
+  bio?: string | null;
+  visibility: PetVisibility;
+  createdAt?: string;
+}
+
+/** Hồ sơ như CHÍNH CHỦ nhìn thấy — thêm trạng thái và mốc cập nhật */
+export interface OwnedPetProfile extends PublicPetProfile {
+  status: PetProfileStatus;
+  updatedAt?: string | null;
+}
+
 /**
- * Body của POST/PUT /v1/pets. Cố ý KHÔNG có `ownerId`, `ownershipType`,
- * `status`, `petId` hay các cột thời gian — backend quản lý chúng và DTO phía
- * server cũng không khai, gửi thêm chỉ bị bỏ qua.
+ * Body của POST /v1/pets. Cố ý KHÔNG có `ownerId` hay `status` — backend suy
+ * chủ sở hữu từ token. `visibility` chỉ nhận được ở bước TẠO (hồ sơ công khai
+ * sinh cùng transaction); sau đó đổi qua PUT /v1/pet-profiles/:petId.
  */
 export interface PetInput {
   name: string;
@@ -333,7 +492,27 @@ export interface PetInput {
   gender: PetGender;
   /** Định dạng yyyy-MM-dd; backend từ chối ngày ở tương lai */
   dateOfBirth: string;
+  /** Bỏ trống thì backend mặc định PUBLIC. Chỉ dùng khi TẠO. */
+  visibility?: PetVisibility;
+}
+
+/** Body của PUT /v1/pets/:petId — không có `visibility`, xem ghi chú ở PetInput */
+export type PetUpdateInput = Omit<PetInput, "visibility">;
+
+/**
+ * Body JSON của PUT /v1/pet-profiles/:petId.
+ *
+ * Giao diện KHÔNG dùng biến thể này — nó gửi multipart để tải ảnh lên, cùng
+ * luồng với hồ sơ tài khoản. Kiểu vẫn giữ lại vì endpoint JSON còn sống cho
+ * client nào đã có sẵn URL ảnh.
+ *
+ * `avatarUrl`/`coverUrl`: bỏ trống = giữ nguyên ảnh cũ, chuỗi rỗng = xoá ảnh.
+ */
+export interface PetProfileInput {
+  handle: string;
+  displayName: string;
   bio?: string | null;
-  /** Bỏ trống thì backend mặc định PUBLIC */
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
   visibility?: PetVisibility;
 }

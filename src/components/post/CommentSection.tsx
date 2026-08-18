@@ -3,8 +3,22 @@ import { Link } from "react-router-dom";
 import { errorMessage } from "../../api/client";
 import { commentApi } from "../../api/endpoints";
 import { useAuth } from "../../context/AuthContext";
+import { useActivePet } from "../../context/PetContext";
 import type { Comment } from "../../types";
 import { Alert, Avatar, Button, timeAgo } from "../ui";
+
+/**
+ * Tên hiển thị của tác giả một bình luận. Backend đã đổi `CommentItem.account`
+ * thành `CommentItem.pet`: bình luận do THÚ CƯNG viết, và hồ sơ kèm theo là hồ
+ * sơ công khai của con vật chứ không phải của chủ.
+ *
+ * Chuỗi rỗng là giá trị HỢP LỆ chứ không phải thiếu dữ liệu — backend điền ""
+ * khi hồ sơ đã ngừng hoạt động, giữ nguyên giao kèo "các khoá này luôn tồn tại".
+ */
+function petName(comment?: Comment | null) {
+  const profile = comment?.pet?.profile;
+  return profile?.displayName || comment?.pet?.name || "Ẩn danh";
+}
 
 /** Số luồng gốc hiện sẵn dưới mỗi bài trong bảng tin */
 const PREVIEW_SIZE = 3;
@@ -91,9 +105,7 @@ function buildThreads(list: Comment[]): Thread[] {
      *    và tên ngay bên trên đã là A.
      */
     const addsContext =
-      parent &&
-      parent.id !== root.id &&
-      parent.account?.id !== comment.account?.id;
+      parent && parent.id !== root.id && parent.pet?.id !== comment.pet?.id;
 
     thread.replies.push({
       comment,
@@ -122,25 +134,30 @@ function CommentRow({
   onReply?: (comment: Comment) => void;
   size?: "root" | "reply";
 }) {
-  const { user, can } = useAuth();
+  const { can } = useAuth();
+  const { pets } = useActivePet();
   const [error, setError] = useState("");
-  // Chủ bình luận xoá được của mình; staff có post:delete xoá được của bất kỳ ai
-  const canDelete = comment.account?.id === user?.id || can("post:delete");
+  /**
+   * Chủ bình luận xoá được của mình; staff có post:delete xoá được của bất kỳ
+   * ai. "Của mình" xét ở mức TÀI KHOẢN — bình luận do bất kỳ con nào của tôi
+   * viết đều là của tôi, kể cả khi tôi đang thao tác nhân danh con khác. Đây
+   * đúng là cách CommentAccessGuard bên backend xét.
+   */
+  const canDelete =
+    pets.some((pet) => pet.petId === comment.pet?.id) || can("post:delete");
 
   return (
     <div className="comment-row">
       <Avatar
-        src={comment.account?.profile?.avatarUrl}
-        name={comment.account?.username}
+        src={comment.pet?.profile?.avatarUrl ?? undefined}
+        name={petName(comment)}
         size={size === "reply" ? 26 : 32}
       />
       <div className="grow">
         <div className="comment-bubble">
           <div className="comment-author">
-            {comment.account?.id ? (
-              <Link to={`/profile/${comment.account.id}`}>
-                {comment.account.username ?? "Ẩn danh"}
-              </Link>
+            {comment.pet?.id ? (
+              <Link to={`/pets/${comment.pet.id}`}>{petName(comment)}</Link>
             ) : (
               "Ẩn danh"
             )}
@@ -149,10 +166,10 @@ function CommentRow({
             {/* Nhánh sâu bị kéo phẳng lên tầng 2, @tên là thứ giữ lại ngữ cảnh */}
             {replyingTo && (
               <Link
-                to={`/profile/${replyingTo.account?.id}`}
+                to={`/pets/${replyingTo.pet?.id}`}
                 className="comment-mention"
               >
-                @{replyingTo.account?.username ?? "ẩn danh"}
+                @{replyingTo.pet?.profile?.handle || petName(replyingTo)}
               </Link>
             )}
             {comment.content}
@@ -296,7 +313,8 @@ export function CommentSection({
   onCountChange?: (count: number) => void;
   inputRef?: React.RefObject<HTMLInputElement | null>;
 }) {
-  const { user, can } = useAuth();
+  const { can } = useAuth();
+  const { activePet } = useActivePet();
   const [comments, setComments] = useState<Comment[]>([]);
   const [draft, setDraft] = useState("");
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
@@ -345,7 +363,8 @@ export function CommentSection({
       // DB giữ nguyên quan hệ sâu, phần hiển thị mới là chỗ kéo phẳng.
       if (replyTo) form.append("replyCommentId", String(replyTo.id));
       if (image) form.append("image", image);
-      // accountId lấy từ token ở backend
+      // Tác giả bình luận đến từ header X-Pet-Id (api/client.ts tự gắn), không
+      // phải từ token — cột comments.pet_id là NOT NULL.
       await commentApi.create(form);
       setDraft("");
       setReplyTo(null);
@@ -371,7 +390,7 @@ export function CommentSection({
 
   const composer = (
     <Composer
-      user={user}
+      activePet={activePet}
       canComment={can("comment:create")}
       draft={draft}
       setDraft={setDraft}
@@ -432,7 +451,7 @@ export function CommentSection({
 }
 
 function Composer({
-  user,
+  activePet,
   canComment,
   draft,
   setDraft,
@@ -445,7 +464,7 @@ function Composer({
   replyTo,
   clearReply,
 }: {
-  user: ReturnType<typeof useAuth>["user"];
+  activePet: ReturnType<typeof useActivePet>["activePet"];
   canComment: boolean;
   draft: string;
   setDraft: (value: string) => void;
@@ -460,16 +479,17 @@ function Composer({
 }) {
   if (!canComment) return null;
   // Chip vẫn cần hiện để biết phản hồi sẽ rơi vào nhánh nào, nhưng xưng @tên của
-  // chính người đang gõ thì vô nghĩa — đổi thành "chính bạn".
+  // chính con vật đang gõ thì vô nghĩa — đổi thành "chính bạn".
   const replyingToSelf = Boolean(
-    replyTo && user && replyTo.account?.id === user.id,
+    replyTo && activePet && replyTo.pet?.id === activePet.petId,
   );
+  const replyTarget = replyTo?.pet?.profile?.handle || petName(replyTo);
   return (
     <div className="comment-composer">
       {replyTo && (
         <div className="reply-chip">
           Đang trả lời{" "}
-          <b>{replyingToSelf ? "chính bạn" : `@${replyTo.account?.username}`}</b>
+          <b>{replyingToSelf ? "chính bạn" : `@${replyTarget}`}</b>
           <button className="link-btn" onClick={clearReply}>
             huỷ
           </button>
@@ -490,7 +510,11 @@ function Composer({
         </div>
       )}
       <div className="row">
-        <Avatar src={user?.avatarUrl} name={user?.username} size={30} />
+        <Avatar
+          src={activePet?.profile?.avatarUrl ?? undefined}
+          name={activePet?.profile?.displayName ?? activePet?.name}
+          size={30}
+        />
         <input
           ref={field}
           className="input grow"
@@ -498,10 +522,12 @@ function Composer({
           onChange={(e) => setDraft(e.target.value)}
           placeholder={
             !replyTo
-              ? "Viết bình luận…"
+              ? activePet
+                ? `Bình luận với tư cách ${activePet.profile.displayName}…`
+                : "Viết bình luận…"
               : replyingToSelf
                 ? "Viết trả lời…"
-                : `Trả lời @${replyTo.account?.username}…`
+                : `Trả lời @${replyTarget}…`
           }
           onKeyDown={(e) => e.key === "Enter" && onSubmit()}
         />

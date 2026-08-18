@@ -10,6 +10,9 @@ import type { Notification, NotificationObjectType } from "../types";
  * không bấm được như trước.
  *
  * Hợp đồng phía backend: notification/entity/NotificationObjectType.java.
+ *
+ * `objectId` của cả bốn loại `GROUP_*` là id NHÓM, không phải id thú cưng liên
+ * quan — thú cưng nào gây ra thông báo thì đọc từ `actorId`.
  */
 export interface NotificationKind {
   glyph: string;
@@ -59,6 +62,28 @@ export const NOTIFICATION_KINDS: Record<NotificationObjectType, NotificationKind
       glyph: "🤝",
       label: "Kết bạn",
       href: (n) => withId("/profile", n.actorId),
+    },
+    GROUP_JOIN_REQUESTED: {
+      glyph: "🚪",
+      label: "Xin vào nhóm",
+      // Dẫn tới chính nhóm đó: hộp thư "Yêu cầu tham gia" nằm ngay trong trang
+      // nhóm cho quản trị viên, nên không cần một route riêng để duyệt.
+      href: (n) => withId("/groups", n.objectId),
+    },
+    GROUP_JOIN_APPROVED: {
+      glyph: "🎟️",
+      label: "Đã được vào nhóm",
+      href: (n) => withId("/groups", n.objectId),
+    },
+    GROUP_INVITED: {
+      glyph: "📨",
+      label: "Lời mời vào nhóm",
+      href: (n) => withId("/groups", n.objectId),
+    },
+    GROUP_INVITE_ACCEPTED: {
+      glyph: "🧩",
+      label: "Đã nhận lời mời",
+      href: (n) => withId("/groups", n.objectId),
     },
     POST: {
       glyph: "🔔",

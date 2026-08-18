@@ -8,16 +8,23 @@ import type {
   Comment,
   FriendShipList,
   Group,
+  GroupInvite,
+  GroupJoinRequest,
+  GroupMemberStatus,
   MarkStatusResult,
   Message,
   MessageStatus,
   Notification,
   NotificationObjectType,
+  OwnedPetProfile,
   PetDetail,
   PetInput,
   PetListItem,
+  PetProfileInput,
+  PetUpdateInput,
   Post,
   Profile,
+  PublicPetProfile,
   Report,
   ReportAction,
   ReportType,
@@ -119,19 +126,23 @@ export const roleApi = {
     api.get("/v1/roles").then(unwrap<{ id: number; name: RoleName }[]>),
 };
 
-/* ────────────────────────── profiles ───────────────────────── */
+/* ─────────────────────── account profiles ──────────────────── */
 
-export const profileApi = {
-  /** Tìm người theo tên — endpoint tìm kiếm duy nhất backend đang có */
-  search: (fullName: string) =>
-    api.get("/v1/profiles", { params: { fullName } }).then(unwrap<Profile[]>),
-  list: () => api.get("/v1/profiles").then(unwrap<Profile[]>),
-  detail: (id: number) => api.get(`/v1/profiles/${id}`).then(unwrap<Profile>),
-  byAccount: (accountId: number) =>
-    api.get(`/v1/profiles/accounts/${accountId}`).then(unwrap<Profile>),
-
-  /** Hồ sơ của chính người gọi — accountId lấy từ token, client không cần biết profileId */
-  mine: () => api.get("/v1/profiles/me").then(unwrap<Profile>),
+/**
+ * Hồ sơ của CHỦ tài khoản — thông tin con người, không phải con vật. Đường dẫn
+ * đã đổi `/v1/profiles` → `/v1/account-profiles` khi backend tách
+ * `AccountProfile` khỏi `PetProfile`: tên cũ đã mơ hồ từ lúc hồ sơ thú cưng ra
+ * đời.
+ *
+ * Chỉ còn HAI đường: đọc hồ sơ của chính mình, và sửa nó. Ba endpoint cũ
+ * (`list`, `detail`, `byAccount`, và tìm theo `fullName`) đã bị bỏ hẳn ở
+ * backend — hồ sơ chủ tài khoản là dữ liệu riêng tư, không phải thứ để duyệt
+ * qua. Muốn tìm người trên mạng xã hội thì tìm HỒ SƠ THÚ CƯNG
+ * ({@link petProfileApi.byHandle}), vì pet mới là thực thể hoạt động.
+ */
+export const accountProfileApi = {
+  /** accountId lấy từ token, client không cần biết profileId */
+  mine: () => api.get("/v1/account-profiles/me").then(unwrap<Profile>),
 
   /**
    * Cập nhật hồ sơ của chính người gọi.
@@ -145,7 +156,7 @@ export const profileApi = {
    */
   update: (form: FormData) =>
     api
-      .put("/v1/profiles", form, {
+      .put("/v1/account-profiles", form, {
         headers: { "Content-Type": "multipart/form-data" },
       })
       .then(unwrap<Profile>),
@@ -177,15 +188,31 @@ export const postApi = {
       // Bản chi tiết đặt danh sách like ở `listLike`, bản danh sách ở `likeList`
       .then((post) => ({ ...post, likeList: post.likeList ?? post.listLike })),
   /**
-   * GetPostByAccountIdOutputDTO không có trường accountId, nên gắn lại từ tham
-   * số gọi — nếu không PostCard sẽ hiển thị tác giả là `undefined`.
+   * Bài của MỘT thú cưng — đơn vị tác giả thật sau khi `posts.account_id` thành
+   * `posts.pet_id`. Đây là route cho trang hồ sơ thú cưng.
+   *
+   * `PostByAccountItem` không mang `petId`, nên gắn lại từ tham số gọi — nếu
+   * không PostCard sẽ hiển thị tác giả là `undefined`.
+   */
+  byPet: (petId: number) =>
+    api
+      .get(`/v1/posts/pets/${petId}`)
+      .then(unwrap<Post[]>)
+      .then((list) => (list ?? []).map((post) => ({ ...post, petId }))),
+  /**
+   * Bài của TẤT CẢ thú cưng thuộc một tài khoản. Backend lọc qua
+   * `pets.account_id`; DTO không nói bài nào của con nào, nên `petId` ở đây để
+   * trống và PostCard hiện tác giả ở dạng rút gọn.
    */
   byAccount: (accountId: number) =>
     api
       .get(`/v1/posts/accounts/${accountId}`)
       .then(unwrap<Post[]>)
-      .then((list) => (list ?? []).map((post) => ({ ...post, accountId }))),
-  /** accountId lấy từ token; form bắt buộc có `scope`, backend từ chối nếu thiếu */
+      .then((list) => list ?? []),
+  /**
+   * Tác giả là THÚ CƯNG trong header `X-Pet-Id` (client.ts tự gắn), không phải
+   * tài khoản trong token. Form bắt buộc có `scope`, backend từ chối nếu thiếu.
+   */
   create: (form: FormData) =>
     api.post("/v1/posts", form, {
       headers: { "Content-Type": "multipart/form-data" },
@@ -220,13 +247,19 @@ export type CommentPayload = Comment;
 /* ─────────────────────── pets ─────────────────────── */
 
 /**
- * Khác mọi module còn lại, pets nhận **JSON** chứ không phải multipart — hồ sơ thú
- * cưng chưa có ảnh đại diện ở bản này nên không cần FormData.
+ * Module pets nhận **JSON** chứ không phải multipart: ảnh của thú cưng nằm ở HỒ
+ * SƠ CÔNG KHAI ({@link petProfileApi}) và được gửi dưới dạng URL, không phải
+ * file — backend không upload hộ ở đây.
+ *
+ * Ranh giới hai bảng phải giữ đúng cả ở tầng api: `pets` là dữ liệu SINH HỌC
+ * (loài, giống, ngày sinh, giới tính, chủ), `pet_profiles` là MẶT CÔNG KHAI
+ * (handle, displayName, avatar, cover, bio, visibility). Gộp hai lời gọi vào
+ * một hàm "tiện" ở đây sẽ dựng lại đúng cái ranh giới mà backend vừa tách ra.
  */
 export const petApi = {
   /**
-   * KHÔNG nhận tham số userId: backend lấy danh tính từ token, không có endpoint
-   * dạng `/v1/pets?userId=`. Danh sách gồm cả những con mình chỉ là CO_OWNER.
+   * KHÔNG nhận tham số accountId: backend lấy danh tính từ token. Đây cũng là
+   * nguồn dữ liệu của bộ chọn "đang thao tác với con nào" (PetContext).
    */
   mine: () =>
     api
@@ -237,20 +270,66 @@ export const petApi = {
   /** optionalAuth — hồ sơ PUBLIC xem được khi chưa đăng nhập; ngoài ra trả 404 */
   detail: (petId: number) => api.get(`/v1/pets/${petId}`).then(unwrap<PetDetail>),
 
-  /** Người tạo tự động thành PRIMARY_OWNER; không gửi ownerId trong body */
+  /**
+   * Tạo con vật VÀ hồ sơ công khai của nó trong MỘT transaction ở backend, nên
+   * `visibility` gửi kèm ngay từ bước này. Chủ sở hữu suy từ token.
+   */
   create: (body: PetInput) => api.post("/v1/pets", body).then(unwrap<PetDetail>),
 
-  update: (petId: number, body: PetInput) =>
+  /**
+   * Chỉ sửa dữ liệu sinh học. `bio`/`visibility` KHÔNG còn ở đây — chúng thuộc
+   * hồ sơ công khai, sửa qua {@link petProfileApi.update}; gửi kèm chỉ bị bỏ qua.
+   */
+  update: (petId: number, body: PetUpdateInput) =>
     api.put(`/v1/pets/${petId}`, body).then(unwrap<PetDetail>),
 
   /**
-   * Xoá MỀM: hồ sơ chuyển sang ARCHIVED và biến mất khỏi mọi luồng đọc, kể cả
-   * danh sách của chính chủ. Chỉ PRIMARY_OWNER gọi được — CO_OWNER nhận 403.
+   * Ngừng hoạt động (xoá MỀM): con vật chuyển sang DEACTIVATED và biến mất khỏi
+   * mọi luồng đọc, kể cả danh sách của chính chủ. Bài viết và bình luận cũ vẫn
+   * nằm trong DB vì chúng trỏ tới `pets.id` — nhưng tác giả sẽ không hiện ra.
    */
-  archive: (petId: number) =>
+  deactivate: (petId: number) =>
     api
       .delete(`/v1/pets/${petId}`)
-      .then(unwrap<{ petId: number; status: "ARCHIVED" }>),
+      .then(unwrap<{ petId: number; status: "DEACTIVATED" }>),
+};
+
+/**
+ * Hồ sơ công khai của thú cưng — thứ người lạ nhìn thấy, và là danh bạ tìm kiếm
+ * của mạng xã hội này (`handle` thay cho username).
+ */
+export const petProfileApi = {
+  /** Tra cứu CÔNG KHAI theo handle — dùng cho tìm kiếm và cho @mention */
+  byHandle: (handle: string) =>
+    api
+      .get(`/v1/pet-profiles/handle/${encodeURIComponent(handle)}`)
+      .then(unwrap<PublicPetProfile>),
+
+  /** optionalAuth; hồ sơ PRIVATE/FOLLOWERS trả 404 với người ngoài */
+  byPetId: (petId: number) =>
+    api.get(`/v1/pet-profiles/${petId}`).then(unwrap<PublicPetProfile>),
+
+  /** Bản CHỦ SỞ HỮU nhìn thấy — thêm status và updatedAt */
+  owned: (petId: number) =>
+    api.get(`/v1/pet-profiles/${petId}/owned`).then(unwrap<OwnedPetProfile>),
+
+  /**
+   * Multipart — cùng luồng với `accountProfileApi.update`: file `avatar`/`cover`
+   * được backend đẩy lên Cloudinary rồi lưu URL trả về.
+   *
+   * Không đính file thì ảnh cũ được GIỮ NGUYÊN; muốn xoá ảnh thì gửi tường minh
+   * trường `avatarUrl`/`coverUrl` là chuỗi rỗng.
+   */
+  update: (petId: number, form: FormData) =>
+    api
+      .put(`/v1/pet-profiles/${petId}`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      .then(unwrap<OwnedPetProfile>),
+
+  /** Biến thể JSON, cho client đã có sẵn URL ảnh */
+  updateJson: (petId: number, body: PetProfileInput) =>
+    api.put(`/v1/pet-profiles/${petId}`, body).then(unwrap<OwnedPetProfile>),
 };
 
 
@@ -263,17 +342,29 @@ export const groupApi = {
       .then(unwrap<Group[]>)
       .then((list) => list ?? []),
   detail: (id: number) => api.get(`/v1/groups/${id}`).then(unwrap<Group>),
+  /** Nhóm do BẤT KỲ thú cưng nào của tài khoản làm chủ */
   owned: (accountId: number) =>
     api
       .get(`/v1/groups/owned/${accountId}`)
       .then(unwrap<Group[]>)
       .then((list) => list ?? []),
+  /** Nhóm mà BẤT KỲ thú cưng nào của tài khoản đang tham gia */
   joined: (accountId: number) =>
     api
       .get(`/v1/groups/joined/${accountId}`)
       .then(unwrap<Group[]>)
       .then((list) => list ?? []),
-  /** Người tạo tự động thành OWNER trong group_members */
+  /** Nhóm của MỘT thú cưng — dùng cho trang hồ sơ thú cưng */
+  joinedByPet: (petId: number) =>
+    api
+      .get(`/v1/groups/joined/pets/${petId}`)
+      .then(unwrap<Group[]>)
+      .then((list) => list ?? []),
+  /**
+   * Thú cưng trong header `X-Pet-Id` trở thành OWNER trong group_members.
+   * Quyền quản trị nhóm gắn với PET: đổi sang con khác của cùng chủ là mất
+   * quyền quản trị nhóm đó.
+   */
   create: (form: FormData) =>
     api.post("/v1/groups", form, {
       headers: { "Content-Type": "multipart/form-data" },
@@ -282,12 +373,67 @@ export const groupApi = {
     api.put(`/v1/groups/${id}`, form, {
       headers: { "Content-Type": "multipart/form-data" },
     }),
-  /** owner lấy từ token ở backend */
+  /** Chỉ pet có role OWNER xoá được — xét theo X-Pet-Id, không theo tài khoản */
   remove: (groupId: number) => api.delete("/v1/groups", { data: { groupId } }),
-  addMember: (groupId: number, invitee: number) =>
-    api.post("/v1/groups/invites", { groupId, invitee }),
-  removeMember: (groupId: number, member: number) =>
-    api.delete("/v1/groups/members", { data: { groupId, member } }),
+  /** `memberPetId` là id THÚ CƯNG bị xoá khỏi nhóm */
+  removeMember: (groupId: number, memberPetId: number) =>
+    api.delete("/v1/groups/members", { data: { groupId, member: memberPetId } }),
+
+  /* ─────────────── tự tham gia / rời nhóm ─────────────── */
+
+  /**
+   * Nhóm PUBLIC vào được ngay (`status: "ACTIVE"`); nhóm PRIVATE chỉ tạo yêu cầu
+   * chờ quản trị nhóm duyệt (`status: "PENDING"`) — đọc `status` trong phản hồi
+   * thay vì đoán theo `group.type`, vì backend là nơi quyết định.
+   *
+   * Đang có lời mời chưa trả lời thì lệnh này được coi là CHẤP NHẬN lời mời đó.
+   * Đã là thành viên, hoặc đã tự gửi yêu cầu trước đó, thì 409.
+   */
+  join: (groupId: number) =>
+    api
+      .post(`/v1/groups/${groupId}/join`)
+      .then(unwrap<{ groupId: number; petId: number; status: GroupMemberStatus }>),
+  /** Huỷ yêu cầu do CHÍNH thú cưng này gửi; không dùng cho lời mời */
+  cancelJoinRequest: (groupId: number) =>
+    api.delete(`/v1/groups/${groupId}/join`),
+  /** Chủ nhóm không rời được (400) — phải xoá nhóm hoặc chuyển quyền */
+  leave: (groupId: number) => api.delete(`/v1/groups/${groupId}/leave`),
+
+  /* ─────────────── yêu cầu vào nhóm: quản trị duyệt ─────────────── */
+
+  /** Chỉ các yêu cầu TỰ gửi; lời mời không nằm ở đây vì người duyệt chúng khác */
+  joinRequests: (groupId: number) =>
+    api
+      .get(`/v1/groups/${groupId}/requests`)
+      .then(unwrap<GroupJoinRequest[]>)
+      .then((list) => list ?? []),
+  approveJoinRequest: (groupId: number, petId: number) =>
+    api.post("/v1/groups/requests/approve", { groupId, petId }),
+  /** Từ chối = XOÁ hàng, nên thú cưng đó xin lại được sau này */
+  rejectJoinRequest: (groupId: number, petId: number) =>
+    api.post("/v1/groups/requests/reject", { groupId, petId }),
+
+  /* ─────────────── lời mời: người được mời trả lời ─────────────── */
+
+  /**
+   * Mời một thú cưng khác. `inviteePetId` là id THÚ CƯNG, KHÔNG phải id tài khoản.
+   *
+   * Chỉ tạo lời mời PENDING — người được mời phải tự chấp nhận, và trước đó họ
+   * không đọc được gì trong nhóm. Mọi thành viên ACTIVE đều mời được, không cần
+   * quyền quản trị.
+   */
+  invite: (groupId: number, inviteePetId: number) =>
+    api.post("/v1/groups/invites", { groupId, invitee: inviteePetId }),
+  /** Hộp thư lời mời của thú cưng trong `X-Pet-Id` — không nhận id trong URL */
+  myInvites: () =>
+    api
+      .get("/v1/groups/invites/mine")
+      .then(unwrap<GroupInvite[]>)
+      .then((list) => list ?? []),
+  acceptInvite: (groupId: number) =>
+    api.post("/v1/groups/invites/accept", { groupId }),
+  rejectInvite: (groupId: number) =>
+    api.post("/v1/groups/invites/reject", { groupId }),
 };
 
 /* ──────────────────────── friendships ──────────────────────── */

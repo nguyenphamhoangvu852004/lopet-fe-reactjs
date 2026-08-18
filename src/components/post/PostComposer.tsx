@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
 import { errorMessage } from "../../api/client";
 import { postApi } from "../../api/endpoints";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useActivePet } from "../../context/PetContext";
 import type { PostScope } from "../../types";
-import { Alert, Avatar, Badge, Button, Card } from "../ui";
+import { Alert, Avatar, Badge, Button, Card, EmptyState } from "../ui";
 
 /**
  * Backend BẮT BUỘC trường `scope` và từ chối request nếu giá trị không hợp lệ
@@ -29,7 +31,8 @@ export function PostComposer({
   groupId?: number;
   onPosted: () => void;
 }) {
-  const { user, can } = useAuth();
+  const { can } = useAuth();
+  const { activePet, pets, ready } = useActivePet();
   const [content, setContent] = useState("");
   const [scope, setScope] = useState<PostScope>("PUBLIC");
   const [files, setFiles] = useState<File[]>([]);
@@ -41,6 +44,26 @@ export function PostComposer({
 
   if (!can("post:create")) return null;
 
+  /**
+   * Không có thú cưng thì KHÔNG đăng bài được — backend đòi header `X-Pet-Id`
+   * và tác giả ghi xuống DB là `pets.id`. Chặn ở đây thay vì để người dùng gõ
+   * xong cả bài rồi mới nhận 403.
+   */
+  if (ready && pets.length === 0) {
+    return (
+      <Card>
+        <EmptyState
+          icon="🐾"
+          title="Tạo thú cưng để bắt đầu đăng bài"
+          hint="Mạng xã hội này lấy thú cưng làm chủ thể: mọi bài viết, bình luận và nhóm đều gắn với một bé cụ thể."
+        />
+        <Link to="/pets" className="btn btn-primary">
+          + Thêm thú cưng
+        </Link>
+      </Card>
+    );
+  }
+
   async function submit() {
     if (!content.trim() && files.length === 0) return;
     setBusy(true);
@@ -50,7 +73,8 @@ export function PostComposer({
       form.append("content", content);
       form.append("scope", scope);
       if (groupId) form.append("groupId", String(groupId));
-      // accountId KHÔNG gửi lên — backend lấy từ token
+      // Tác giả KHÔNG gửi trong body — backend đọc từ header X-Pet-Id, thứ mà
+      // api/client.ts tự gắn từ PetContext.
       files.forEach((file) =>
         form.append(file.type.startsWith("video") ? "videos" : "images", file),
       );
@@ -69,7 +93,10 @@ export function PostComposer({
   return (
     <Card>
       <div className="row" style={{ alignItems: "flex-start" }}>
-        <Avatar src={user?.avatarUrl} name={user?.username} />
+        <Avatar
+          src={activePet?.profile?.avatarUrl ?? undefined}
+          name={activePet?.profile?.displayName ?? activePet?.name}
+        />
         <textarea
           className="textarea grow"
           style={{ minHeight: 62 }}
@@ -77,11 +104,20 @@ export function PostComposer({
           onChange={(e) => setContent(e.target.value)}
           placeholder={
             groupId
-              ? "Chia sẻ điều gì đó với nhóm…"
-              : `${user?.username ?? "Bạn"} ơi, hôm nay boss thế nào?`
+              ? `Đăng vào nhóm với tư cách ${activePet?.profile?.displayName ?? "thú cưng của bạn"}…`
+              : `${activePet?.profile?.displayName ?? "Bé nhà bạn"} hôm nay thế nào?`
           }
         />
       </div>
+
+      {/* Người dùng phải THẤY mình đang đăng nhân danh con nào: cùng một ô soạn
+          thảo cho ra hai tác giả khác nhau tuỳ lựa chọn ở thanh trên cùng. */}
+      {activePet && (
+        <div className="faint" style={{ marginTop: 6 }}>
+          Đăng với tư cách <b>{activePet.profile.displayName}</b>
+          {activePet.profile.handle ? ` (@${activePet.profile.handle})` : ""}
+        </div>
+      )}
 
       {files.length > 0 && (
         <div className="row" style={{ flexWrap: "wrap", marginTop: 10 }}>
