@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { errorMessage } from "../api/client";
-import { accountApi, friendApi, groupApi, postApi, profileApi } from "../api/endpoints";
+import {
+  accountApi,
+  friendApi,
+  groupApi,
+  petProfileApi,
+  postApi,
+} from "../api/endpoints";
 import { PostCard } from "../components/post/PostCard";
 import {
   Alert,
@@ -14,12 +20,12 @@ import {
   Tabs,
 } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
-import { prefetchAccounts } from "../hooks/useAccountLite";
-import type { Group, Post, Profile } from "../types";
+import { prefetchPetProfiles } from "../hooks/usePetProfileLite";
+import type { Group, Post, PublicPetProfile } from "../types";
 
-type Tab = "people" | "posts" | "groups";
+type Tab = "pets" | "people" | "posts" | "groups";
 
-/** Người dùng tra được kèm id tài khoản (khác với hồ sơ, xem ghi chú bên dưới) */
+/** Người dùng tra được kèm id tài khoản — dùng cho kết bạn và nhắn tin */
 interface PersonHit {
   accountId: number;
   username: string;
@@ -31,18 +37,38 @@ export function SearchPage() {
   const query = (params.get("q") ?? "").trim();
   const { user, can } = useAuth();
 
-  const [tab, setTab] = useState<Tab>("people");
+  const [tab, setTab] = useState<Tab>("pets");
+  const [pets, setPets] = useState<PublicPetProfile[]>([]);
   const [people, setPeople] = useState<PersonHit[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   /**
-   * Backend không có endpoint tìm tài khoản theo username, chỉ có tìm HỒ SƠ
-   * theo fullName (GET /v1/profiles?fullName=). Mà DTO hồ sơ không mang
-   * accountId, nên từ kết quả đó không mở được trang cá nhân.
+   * Tìm THÚ CƯNG là đường tìm kiếm chính của mạng xã hội này — pet mới là thực
+   * thể hoạt động, và `handle` đóng vai trò username.
+   *
+   * Backend chỉ có tra CHÍNH XÁC theo handle (`GET /v1/pet-profiles/handle/:h`),
+   * không có tìm mờ: mở một endpoint quét bảng `pet_profiles` sẽ thành đường
+   * liệt kê toàn bộ hồ sơ. Vì thế kết quả ở đây tối đa một dòng, và phần gợi ý
+   * nói rõ điều đó thay vì để người dùng tưởng mình gõ sai.
+   */
+  const findPet = useCallback(async (needle: string) => {
+    const handle = needle.replace(/^@/, "").toLowerCase();
+    if (!handle) return [];
+    try {
+      return [await petProfileApi.byHandle(handle)];
+    } catch {
+      // 404 = không tồn tại HOẶC hồ sơ riêng tư; backend cố ý không phân biệt
+      return [];
+    }
+  }, []);
+
+  /**
+   * Backend không có endpoint tìm tài khoản theo username, và hồ sơ chủ tài
+   * khoản (`/v1/account-profiles`) nay chỉ đọc được của CHÍNH MÌNH — không còn
+   * đường liệt kê nào để lọc.
    *
    * Cách vòng: dựng một danh bạ cục bộ từ những nguồn có kèm id tài khoản —
    * bạn bè, gợi ý kết bạn, và (nếu là staff) toàn bộ danh sách tài khoản — rồi
@@ -88,8 +114,8 @@ export function SearchPage() {
 
   useEffect(() => {
     if (!query) {
+      setPets([]);
       setPeople([]);
-      setProfiles([]);
       setPosts([]);
       setGroups([]);
       return;
@@ -99,20 +125,20 @@ export function SearchPage() {
 
     const needle = query.toLowerCase();
     Promise.all([
+      findPet(needle),
       buildDirectory(),
-      profileApi.search(query).catch(() => []),
       postApi.feed({ content: query }).catch(() => []),
       // Backend chưa có tìm nhóm — lọc trên danh sách gợi ý
       groupApi.suggest().catch(() => []),
     ])
-      .then(([directory, profileHits, postHits, groupHits]) => {
+      .then(([petHits, directory, postHits, groupHits]) => {
+        setPets(petHits);
         setPeople(
           directory.filter((person) =>
             person.username.toLowerCase().includes(needle),
           ),
         );
-        setProfiles(profileHits);
-        prefetchAccounts(postHits.map((post) => post.accountId));
+        prefetchPetProfiles(postHits.map((post) => post.petId));
         setPosts(postHits);
         setGroups(
           groupHits.filter((group) =>
@@ -122,13 +148,17 @@ export function SearchPage() {
       })
       .catch((e) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [query, buildDirectory]);
+  }, [query, findPet, buildDirectory]);
 
   if (!query)
     return (
       <Card>
         <CardHead title="Tìm kiếm" sub="Nhập từ khoá ở ô tìm kiếm phía trên" />
-        <EmptyState icon="🔍" title="Chưa có từ khoá" />
+        <EmptyState
+          icon="🔍"
+          title="Chưa có từ khoá"
+          hint="Tìm thú cưng bằng handle (@milo), hoặc tìm người, bài viết, nhóm"
+        />
       </Card>
     );
 
@@ -140,7 +170,8 @@ export function SearchPage() {
           value={tab}
           onChange={setTab}
           options={[
-            { value: "people", label: `Người (${people.length + profiles.length})` },
+            { value: "pets", label: `Thú cưng (${pets.length})` },
+            { value: "people", label: `Người (${people.length})` },
             { value: "posts", label: `Bài viết (${posts.length})` },
             { value: "groups", label: `Nhóm (${groups.length})` },
           ]}
@@ -150,10 +181,46 @@ export function SearchPage() {
 
       {loading ? (
         <Spinner />
+      ) : tab === "pets" ? (
+        <Card>
+          {pets.length === 0 ? (
+            <EmptyState
+              icon="🐾"
+              title="Không tìm thấy thú cưng nào"
+              hint="Handle phải gõ chính xác — API chỉ tra đúng tên, không tìm gần đúng"
+            />
+          ) : (
+            <div className="stack">
+              {pets.map((pet) => (
+                <Link key={pet.petId} to={`/pets/${pet.petId}`} className="row">
+                  <Avatar
+                    src={pet.avatarUrl ?? undefined}
+                    name={pet.displayName}
+                    size={44}
+                  />
+                  <div className="grow truncate">
+                    <div style={{ fontWeight: 650 }}>{pet.displayName}</div>
+                    <div className="faint truncate">
+                      @{pet.handle}
+                      {pet.bio ? ` · ${pet.bio}` : ""}
+                    </div>
+                  </div>
+                  <Badge tone={pet.visibility === "PUBLIC" ? "ok" : "default"}>
+                    {pet.visibility}
+                  </Badge>
+                </Link>
+              ))}
+            </div>
+          )}
+        </Card>
       ) : tab === "people" ? (
         <Card>
-          {people.length === 0 && profiles.length === 0 ? (
-            <EmptyState icon="🔍" title="Không tìm thấy ai" hint="Thử từ khoá khác" />
+          {people.length === 0 ? (
+            <EmptyState
+              icon="🔍"
+              title="Không tìm thấy ai"
+              hint="Chỉ tìm được trong bạn bè và gợi ý kết bạn — API không có đường tra tài khoản công khai"
+            />
           ) : (
             <div className="stack">
               {people.map((person) => (
@@ -170,33 +237,6 @@ export function SearchPage() {
                   </Link>
                 </div>
               ))}
-
-              {profiles.length > 0 && (
-                <>
-                  <div className="card-sub" style={{ marginTop: 10 }}>
-                    Hồ sơ khớp tên
-                  </div>
-                  {profiles.map((profile) => (
-                    <div key={profile.id} className="row">
-                      <Avatar
-                        src={profile.avatarUrl}
-                        name={profile.fullName ?? "?"}
-                      />
-                      <div className="grow truncate">
-                        <div style={{ fontWeight: 650 }}>
-                          {profile.fullName ?? "Chưa đặt tên"}
-                        </div>
-                        <div className="faint truncate">
-                          {profile.bio ?? profile.hometown ?? ""}
-                        </div>
-                      </div>
-                      {/* DTO hồ sơ không kèm accountId nên không mở được trang
-                          cá nhân từ đây — chỉ hiển thị thông tin. */}
-                      <Badge>Hồ sơ #{profile.id}</Badge>
-                    </div>
-                  ))}
-                </>
-              )}
             </div>
           )}
         </Card>

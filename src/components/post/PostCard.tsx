@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { errorMessage } from "../../api/client";
 import { postApi } from "../../api/endpoints";
 import { useAuth } from "../../context/AuthContext";
-import { useAccountLite } from "../../hooks/useAccountLite";
+import { useActivePet } from "../../context/PetContext";
+import { usePetProfileLite } from "../../hooks/usePetProfileLite";
 import type { Post, PostScope } from "../../types";
 import { ReportDialog } from "../report/ReportDialog";
 import { Alert, Avatar, Badge, Button, Card, Modal, timeAgo } from "../ui";
@@ -177,14 +178,18 @@ export function PostCard({
   /** `full` dùng ở trang chi tiết: bình luận phân trang thay vì chỉ 3 dòng */
   variant?: "preview" | "full";
 }) {
-  const { user, can } = useAuth();
-  const author = useAccountLite(post.accountId);
+  const { can } = useAuth();
+  const { pets, activePetId } = useActivePet();
+  const author = usePetProfileLite(post.petId);
 
-  // likeList chứa những tài khoản đã thích — dùng nó để biết mình đã thích chưa,
-  // backend không trả cờ isLiked riêng.
+  /**
+   * likeList chứa những THÚ CƯNG đã thích — backend không trả cờ isLiked riêng.
+   * So theo pet đang thao tác chứ không theo tài khoản: một lượt thích thuộc về
+   * con vật, và hai con cùng chủ thả tim cùng một bài là hai lượt khác nhau.
+   */
   const likeList = post.likeList ?? post.listLike ?? [];
   const [liked, setLiked] = useState(
-    Boolean(likeList.some((a) => a.id === user?.id)),
+    Boolean(activePetId && likeList.some((like) => like.petId === activePetId)),
   );
   const [likes, setLikes] = useState(post.likeAmount ?? 0);
   /**
@@ -198,7 +203,15 @@ export function PostCard({
   const [editing, setEditing] = useState(false);
   const commentInputRef = useRef<HTMLInputElement>(null);
 
-  const isMine = post.accountId === user?.id;
+  /**
+   * "Bài của tôi" = bài do BẤT KỲ thú cưng nào của tôi đăng, không chỉ con đang
+   * chọn. Backend cũng xét quyền sửa/xoá ở mức TÀI KHOẢN (chủ của pet tác giả)
+   * — người dùng không được mất quyền lên nội dung của chính mình chỉ vì đang
+   * thao tác nhân danh con khác.
+   */
+  const isMine = Boolean(
+    post.petId && pets.some((pet) => pet.petId === post.petId),
+  );
   // Chủ bài xoá được bài mình; staff có post:delete xoá được của bất kỳ ai.
   const canDelete = (isMine && can("post:delete:own")) || can("post:delete");
   // Sửa bài thì KHÔNG có ngoại lệ cho staff — backend đặt bypassRoles rỗng.
@@ -237,16 +250,22 @@ export function PostCard({
     <Card>
       <div className="row">
         <Avatar
-          src={author?.profile?.avatarUrl}
-          name={author?.username ?? `#${post.accountId}`}
+          src={author?.avatarUrl ?? undefined}
+          name={author?.displayName ?? `#${post.petId ?? "?"}`}
         />
         <div className="grow">
-          <Link to={`/profile/${post.accountId}`} style={{ fontWeight: 700 }}>
-            {author?.profile?.fullName ||
-              author?.username ||
-              `Người dùng #${post.accountId}`}
-          </Link>
+          {/* Tác giả là thú cưng: dẫn sang hồ sơ CON VẬT, không phải trang tài
+              khoản của chủ. Bài chưa di trú xong (pet_id rỗng) thì không có gì
+              để dẫn tới — hiện chữ trơ thay vì một link hỏng. */}
+          {post.petId ? (
+            <Link to={`/pets/${post.petId}`} style={{ fontWeight: 700 }}>
+              {author?.displayName || `Thú cưng #${post.petId}`}
+            </Link>
+          ) : (
+            <span style={{ fontWeight: 700 }}>Tác giả không xác định</span>
+          )}
           <div className="faint">
+            {author?.handle ? `@${author.handle} · ` : ""}
             {timeAgo(post.createdAt)}
             {post.groupId ? " · trong nhóm" : ""}
             {post.postScope ? ` · ${post.postScope}` : ""}

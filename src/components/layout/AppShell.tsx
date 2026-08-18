@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { friendApi } from "../../api/endpoints";
 import { useAuth } from "../../context/AuthContext";
+import { useActivePet } from "../../context/PetContext";
+import { useGroupInvites } from "../../hooks/useGroupInvites";
 import { Avatar, Button } from "../ui";
 import { NotificationBell } from "./NotificationBell";
 
@@ -19,6 +21,55 @@ function useTheme() {
     theme,
     toggle: () => setTheme((t) => (t === "light" ? "dark" : "light")),
   };
+}
+
+/**
+ * Bộ chọn "đang thao tác nhân danh con nào".
+ *
+ * Đây không phải tiện ích trang trí mà là một phần của hợp đồng với backend:
+ * mọi endpoint ghi nội dung xã hội đòi header `X-Pet-Id`, và giá trị đó quyết
+ * định ai là tác giả bài viết, ai thả tim, ai là thành viên nhóm. Một tài khoản
+ * nhiều thú cưng thì không có cách nào suy ra được lựa chọn này — nó phải hiện
+ * ra để người dùng thấy và đổi được, đúng như chỗ đổi trang trên Facebook.
+ *
+ * Đặt ở thanh trên cùng chứ không giấu trong trang Cài đặt: nó đổi ý nghĩa của
+ * mọi thao tác trên MỌI trang, nên phải luôn nhìn thấy.
+ */
+function PetSwitcher() {
+  const { pets, activePet, select, ready } = useActivePet();
+
+  if (!ready) return null;
+
+  if (pets.length === 0) {
+    return (
+      <NavLink to="/pets" className="btn btn-outline btn-sm">
+        🐾 Tạo thú cưng
+      </NavLink>
+    );
+  }
+
+  return (
+    <label className="row pet-switcher" style={{ gap: 8 }} title="Đang thao tác nhân danh">
+      <Avatar
+        src={activePet?.profile?.avatarUrl ?? undefined}
+        name={activePet?.profile?.displayName ?? activePet?.name}
+        size={30}
+      />
+      <select
+        className="select"
+        style={{ padding: "6px 8px" }}
+        value={activePet?.petId ?? ""}
+        onChange={(e) => select(Number(e.target.value) || null)}
+        aria-label="Thú cưng đang thao tác"
+      >
+        {pets.map((pet) => (
+          <option key={pet.petId} value={pet.petId}>
+            {pet.profile.displayName}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 interface NavEntry {
@@ -63,6 +114,8 @@ export function AppShell({
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [pendingRequests, setPendingRequests] = useState(0);
+  // Lời mời vào nhóm gắn với THÚ CƯNG đang chọn, nên hook tự tải lại khi đổi bé.
+  const { invites: groupInvites } = useGroupInvites();
 
   // Huy hiệu lời mời kết bạn. Tải một lần khi vào app — không có kênh realtime
   // cho lời mời nên cũng không có gì để cộng thêm.
@@ -78,7 +131,12 @@ export function AppShell({
   const mainNav: NavEntry[] = [
     { to: "/", label: "Bảng tin", glyph: "🏠" },
     { to: "/friends", label: "Bạn bè", glyph: "👥", badge: pendingRequests },
-    { to: "/groups", label: "Nhóm", glyph: "🧩" },
+    {
+      to: "/groups",
+      label: "Nhóm",
+      glyph: "🧩",
+      badge: groupInvites.length,
+    },
     { to: "/pets", label: "Thú cưng", glyph: "🐾" },
     { to: "/messages", label: "Tin nhắn", glyph: "💬" },
     // "Thông báo" không còn ở đây: nó là cái chuông trên thanh header. Route
@@ -117,6 +175,7 @@ export function AppShell({
         </form>
 
         <div className="topbar-actions">
+          <PetSwitcher />
           <NotificationBell />
           <Button variant="icon" onClick={toggle} title="Đổi giao diện">
             {theme === "light" ? "🌙" : "☀️"}

@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { io, type Socket } from "socket.io-client";
-import { SOCKET_URL, TOKEN_KEY } from "../api/client";
+import { SESSION_REFRESHED, SOCKET_URL, TOKEN_KEY } from "../api/client";
 import { messageApi } from "../api/endpoints";
 import { useAuth } from "./AuthContext";
 import type {
@@ -166,7 +166,20 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       },
     );
 
+    /**
+     * Token đi vào handshake MỘT lần lúc kết nối. Khi interceptor gia hạn phiên,
+     * token cũ trở thành vô dụng — socket đang sống thì không sao, nhưng lần
+     * socket.io tự kết nối lại (mạng chớp, tab ngủ) nó gửi lại đúng chuỗi cũ và
+     * bị server từ chối, realtime chết im lặng dù phiên vẫn còn hạn.
+     */
+    const onRefreshed = () => {
+      const fresh = localStorage.getItem(TOKEN_KEY);
+      if (fresh) socket.auth = { token: fresh };
+    };
+    window.addEventListener(SESSION_REFRESHED, onRefreshed);
+
     return () => {
+      window.removeEventListener(SESSION_REFRESHED, onRefreshed);
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;

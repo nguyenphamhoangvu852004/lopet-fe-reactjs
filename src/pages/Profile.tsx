@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { errorMessage, isForbidden } from "../api/client";
-import { accountApi, friendApi, postApi, profileApi } from "../api/endpoints";
+import { accountApi, accountProfileApi, friendApi, postApi } from "../api/endpoints";
 import { PostCard } from "../components/post/PostCard";
 import { ReportDialog } from "../components/report/ReportDialog";
 import {
@@ -16,6 +16,7 @@ import {
   Spinner,
 } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
+import { useActivePet } from "../context/PetContext";
 import type { Account, FriendEntry, Post, Profile } from "../types";
 
 /** Quan hệ giữa người xem và tài khoản đang mở */
@@ -25,6 +26,7 @@ export function ProfilePage() {
   const { id } = useParams();
   const accountId = Number(id);
   const { user, refresh } = useAuth();
+  const { pets } = useActivePet();
   const navigate = useNavigate();
   const isMe = accountId === user?.id;
 
@@ -272,6 +274,51 @@ export function ProfilePage() {
         )}
       </Card>
 
+      {/* Thú cưng chỉ liệt kê được cho CHÍNH MÌNH: backend chỉ có
+          GET /v1/pets/me, không có đường liệt kê thú cưng của người khác — hồ
+          sơ từng bé vẫn xem được qua handle nếu nó công khai. */}
+      {isMe && (
+        <Card tight>
+          <CardHead
+            title="Thú cưng của tôi"
+            sub={`${pets.length} bé`}
+            action={
+              <Link to="/pets" className="btn btn-outline btn-sm">
+                Quản lý
+              </Link>
+            }
+          />
+          {pets.length === 0 ? (
+            <div className="faint">
+              Chưa có bé nào. Mạng xã hội này lấy thú cưng làm chủ thể — tạo một
+              bé để bắt đầu đăng bài.
+            </div>
+          ) : (
+            <div className="row" style={{ flexWrap: "wrap", gap: 14 }}>
+              {pets.map((pet) => (
+                <Link
+                  key={pet.petId}
+                  to={`/pets/${pet.petId}`}
+                  style={{ textAlign: "center", width: 78 }}
+                >
+                  <Avatar
+                    src={pet.profile.avatarUrl ?? undefined}
+                    name={pet.profile.displayName}
+                    size={56}
+                  />
+                  <div className="faint truncate" style={{ marginTop: 4 }}>
+                    {pet.profile.displayName}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Bài viết ở đây là của MỌI thú cưng thuộc tài khoản này — backend lọc
+          qua pets.account_id. Muốn xem riêng từng bé thì mở trang của bé đó. */}
+      <CardHead title="Bài viết" sub="Của tất cả thú cưng thuộc tài khoản này" />
       {posts.length === 0 ? (
         <Card>
           <EmptyState title="Chưa có bài viết" />
@@ -309,7 +356,12 @@ export function ProfilePage() {
 }
 
 /**
- * Sửa hồ sơ của chính người gọi: MỘT bước PUT /v1/profiles, không kèm id.
+ * Sửa hồ sơ CHỦ TÀI KHOẢN của chính người gọi: MỘT bước PUT
+ * /v1/account-profiles, không kèm id.
+ *
+ * Đây là hồ sơ CON NGƯỜI (họ tên, số điện thoại, quê quán) — khác hẳn hồ sơ thú
+ * cưng ở trang /pets, thứ quyết định người khác nhìn thấy gì trên mạng xã hội.
+ * Đường dẫn đổi tên cùng lúc backend tách hai khái niệm này ra.
  *
  * Mô hình hai bước cũ (POST /v1/profiles tạo bản ghi rời → POST /v1/profiles/:id gắn vào tài
  * khoản) đã bị bỏ ở backend: bước thứ hai không kiểm sở hữu nên gắn được hồ sơ của người khác
@@ -361,7 +413,7 @@ function ProfileFormModal({
     setBusy(true);
     setError("");
     try {
-      await profileApi.update(buildForm());
+      await accountProfileApi.update(buildForm());
       onSaved();
     } catch (e) {
       setError(errorMessage(e));

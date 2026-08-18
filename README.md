@@ -67,6 +67,35 @@ Backend đã bỏ nhận danh tính từ body. Các payload sau **không còn g�
 
 DTO trả về cũng đã bỏ `password` (mọi account DTO) và `email` (DTO bạn bè).
 
+## Phiên đăng nhập và gia hạn token
+
+Access token sống 1 giờ, refresh token 10 giờ. `src/api/client.ts` giữ toàn bộ
+vòng đời phiên:
+
+| Tình huống | Xử lý |
+|---|---|
+| Access token đã hết hạn (đọc `exp` trong JWT) | Gia hạn **trước** khi gửi request |
+| Response 401 | Gia hạn rồi gửi lại đúng request đó **một** lần |
+| Response 500 kèm message `jwt expired` / `invalid signature` / `jwt malformed` | Cũng coi là token hỏng — xem ghi chú dưới |
+| Response 400 `Token not found` | Gia hạn rồi thử lại |
+| Gia hạn thất bại, hoặc token mới vẫn bị từ chối | `endSession()`: xoá token + user + pet đang chọn, phát `lopet:session-expired` |
+| Response 403 | **Không** đụng tới phiên — 403 là thiếu quyền |
+
+Hai điểm dễ sai:
+
+- **Lỗi token không phải lúc nào cũng là 401.** Route mang `@Auth(required=true)`
+  của backend giữ nguyên hành vi bản TypeScript: message thô của jsonwebtoken lọt
+  ra ngoài kèm mã **500** (`RawJwtException`). Interceptor chỉ bắt 401 sẽ bỏ sót
+  đúng trường hợp phổ biến nhất.
+- **Backend xoay vòng cả hai token**, nên phải ghi lại `refreshToken` mới chứ
+  không chỉ `accessToken`. Mọi lời gọi gia hạn chạy song song dùng chung một
+  request (`pendingRefresh`); để mỗi request tự gọi thì chúng xoay vòng đè lên
+  nhau và phần còn lại của phiên cầm token đã chết.
+
+Socket.IO gửi token một lần trong handshake, nên `RealtimeContext` nghe sự kiện
+`lopet:session-refreshed` để cập nhật `socket.auth` — nếu không, lần tự kết nối
+lại nào cũng cầm token cũ và realtime chết im lặng.
+
 ## Điểm cần biết về dữ liệu
 
 - Bài viết dùng khoá `postId`, **không phải** `id`; số lượt thích là `likeAmount`,
