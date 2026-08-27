@@ -31,7 +31,7 @@ function SuggestionRail() {
   useEffect(() => {
     if (!user) return;
     accountApi
-      .suggest(user.id, 5)
+      .suggest(5)
       .then(setPeople)
       .catch(() => setPeople([]));
     groupApi

@@ -58,7 +58,7 @@ export function SearchPage() {
 
     const [friends, suggestions] = await Promise.all([
       friendApi.listOf(user.id).catch(() => null),
-      accountApi.suggest(user.id, 50).catch(() => []),
+      accountApi.suggest(50).catch(() => []),
     ]);
 
     friends?.others?.forEach((friend) =>
