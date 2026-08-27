@@ -105,10 +105,10 @@ export const accountApi = {
       .get(`/v1/accounts/${id}`)
       .then(unwrap<AccountEntity & { roles?: RoleName[] }>)
       .then(normalizeAccount),
-  /** `id` trên đường dẫn bị controller bỏ qua — luôn gợi ý cho chính người gọi */
-  suggest: (id: number, limit = 5) =>
+  /** Người được gợi ý cho ai là do backend đọc từ access token, không truyền id */
+  suggest: (limit = 5) =>
     api
-      .get(`/v1/accounts/suggest/${id}`, { params: { limit } })
+      .get("/v1/accounts/suggest", { params: { limit } })
       .then(unwrap<AccountEntity[]>)
       .then((list) => (list ?? []).map(normalizeAccount)),
   /** Cần quyền account:ban */
