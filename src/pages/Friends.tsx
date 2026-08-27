@@ -178,7 +178,7 @@ export function NotificationsPage() {
   // Vào trang là coi như đã xem hết phần đếm ở thanh điều hướng
   useEffect(() => clearNotificationBadge(), [clearNotificationBadge]);
 
-  // Thông báo đến qua socket nay CÓ notificationId, nên bản REST tải lại phía
+  // Thông báo đến qua realtime nay CÓ notificationId, nên bản REST tải lại phía
   // trên đã bao trọn chúng. Chỉ giữ lại cái nào chưa kịp có mặt trong danh sách
   // đó, tránh hiện hai lần cùng một thông báo.
   const known = new Set(items.map((n) => n.notificationId));

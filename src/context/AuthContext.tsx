@@ -10,8 +10,8 @@ import {
 import {
   endSession,
   ensureFreshSession,
-  REFRESH_KEY,
   SESSION_EXPIRED,
+  startSession,
   TOKEN_KEY,
   USER_KEY,
 } from "../api/client";
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /**
    * Access token chỉ sống 1 giờ, nên mở lại tab sau một buổi là readStoredUser()
-   * trả về null dù phiên vẫn còn hạn (refresh token sống 10 giờ). Phải gia hạn
+   * trả về null dù phiên vẫn còn hạn (cookie refresh token sống 10 giờ). Phải gia hạn
    * TRƯỚC rồi mới đọc, nếu không người dùng bị đá ra đăng nhập lại một cách vô
    * cớ — đúng thứ mà cơ chế refresh sinh ra để tránh.
    */
@@ -126,8 +126,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (username: string, password: string) => {
       const data = await authApi.login(username, password);
-      localStorage.setItem(TOKEN_KEY, data.accessToken);
-      localStorage.setItem(REFRESH_KEY, data.refreshToken);
+      // Chỉ còn access token để lưu; refresh token đã nằm trong cookie HttpOnly
+      // mà trình duyệt tự giữ từ phản hồi của chính lời gọi này.
+      startSession(data.accessToken);
 
       const payload = decodeToken(data.accessToken);
       const base: AuthUser = {
@@ -145,8 +146,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /**
    * Dùng chung endSession() với interceptor để đăng xuất thủ công và phiên hết
-   * hạn dọn đúng một bộ trạng thái — trước đây bản ở đây quên xoá activePetId,
-   * nên người đăng nhập kế tiếp gửi X-Pet-Id của người trước và nhận 403.
+   * hạn dọn đúng MỘT bộ trạng thái. Hai đường dọn riêng thì sớm muộn cũng lệch
+   * nhau, và dấu vết còn sót lại của phiên trước là thứ người đăng nhập kế tiếp
+   * phải chịu.
    */
   const logout = useCallback(() => {
     endSession();

@@ -7,7 +7,7 @@ cho bản Vue `Lopet_FE`.
 
 ```bash
 npm install
-cp .env.example .env      # VITE_BACKEND_API = REST (8080), VITE_SOCKET_URL = Socket.IO (8081)
+cp .env.example .env      # chỉ cần VITE_BACKEND_API; realtime dùng chung cổng đó
 npm run dev               # http://localhost:5173
 npm run build             # tsc -b && vite build
 ```
@@ -70,7 +70,23 @@ DTO trả về cũng đã bỏ `password` (mọi account DTO) và `email` (DTO b
 ## Phiên đăng nhập và gia hạn token
 
 Access token sống 1 giờ, refresh token 10 giờ. `src/api/client.ts` giữ toàn bộ
-vòng đời phiên:
+vòng đời phiên.
+
+**Hai token nằm ở hai nơi khác nhau:**
+
+| Token | Ở đâu | Ai đọc được |
+|---|---|---|
+| Access token | `localStorage.accessToken`, gắn vào header `Authorization` | JavaScript của FE (cần, để đọc `roles` dựng UI và để gửi kèm frame CONNECT của WebSocket) |
+| Refresh token | Cookie `refreshToken`, cờ `HttpOnly` do backend đặt | **Không ai** ở phía client — trình duyệt tự gửi kèm khi gọi `/v1/auth/refresh` |
+
+Vì vậy `api` và `refreshClient` đều khai `withCredentials: true`; thiếu cờ này
+thì đăng nhập vẫn chạy nhưng trình duyệt không lưu cookie, và phiên chết cứng
+sau 1 giờ. `POST /v1/auth/refresh` **không có body**.
+
+**Cấu hình bắt buộc phía backend:** `DOMAIN_CORS` phải là origin cụ thể của FE
+(vd `http://localhost:5173`). Backend chỉ bật `allowCredentials` khi danh sách
+origin không phải `*` — để `*` thì trình duyệt chặn luôn mọi request mang
+cookie, kể cả đăng nhập.
 
 | Tình huống | Xử lý |
 |---|---|
@@ -87,14 +103,56 @@ Hai điểm dễ sai:
   của backend giữ nguyên hành vi bản TypeScript: message thô của jsonwebtoken lọt
   ra ngoài kèm mã **500** (`RawJwtException`). Interceptor chỉ bắt 401 sẽ bỏ sót
   đúng trường hợp phổ biến nhất.
-- **Backend xoay vòng cả hai token**, nên phải ghi lại `refreshToken` mới chứ
-  không chỉ `accessToken`. Mọi lời gọi gia hạn chạy song song dùng chung một
-  request (`pendingRefresh`); để mỗi request tự gọi thì chúng xoay vòng đè lên
-  nhau và phần còn lại của phiên cầm token đã chết.
+- **Backend xoay vòng refresh token ở mỗi lần gia hạn**, nhưng client không phải
+  làm gì: token mới đi ra bằng `Set-Cookie` và trình duyệt tự ghi đè. Mọi lời gọi
+  gia hạn chạy song song vẫn phải dùng chung một request (`pendingRefresh`) — để
+  mỗi request tự gọi thì chúng xoay vòng đè lên nhau và cookie cuối cùng còn lại
+  không khớp với token mà phần còn lại của phiên đang cầm.
+- **Client không biết phiên còn sống hay không.** Cookie là `HttpOnly` nên không
+  đọc được; thứ duy nhất kiểm được là "máy này đã từng đăng nhập", tức là có
+  `accessToken` trong localStorage. Không có nó thì không gọi gia hạn và 401
+  được để nguyên cho nơi gọi — nếu không, khách vãng lai chạm route cần đăng
+  nhập sẽ bị đá về trang đăng nhập cho một phiên chưa từng tồn tại.
+- **Đăng xuất không xoá được cookie** (`HttpOnly`), chỉ xoá access token. Cookie
+  nằm lại tới khi hết hạn nhưng vô hại vì không còn đường nào dùng tới nó; xoá
+  thật cần một endpoint logout phía backend.
 
-Socket.IO gửi token một lần trong handshake, nên `RealtimeContext` nghe sự kiện
-`lopet:session-refreshed` để cập nhật `socket.auth` — nếu không, lần tự kết nối
-lại nào cũng cầm token cũ và realtime chết im lặng.
+WebSocket gửi token một lần trong frame CONNECT, nên `RealtimeContext` nghe sự
+kiện `lopet:session-refreshed` để cập nhật `connectHeaders` — nếu không, lần tự
+kết nối lại nào cũng cầm token cũ và realtime chết im lặng. Khi server trả frame
+ERROR `TOKEN_EXPIRED`, context gọi gia hạn phiên rồi để chính cơ chế reconnect
+của stompjs dùng token mới; các lỗi xác thực khác thì dừng hẳn thay vì thử lại
+mãi với dữ liệu đã hỏng.
+
+## Realtime
+
+STOMP over WebSocket (`@stomp/stompjs`) tới endpoint `/ws` của backend, **cùng
+cổng với REST** — URL suy ra từ `VITE_BACKEND_API` (http → ws, https → wss).
+Bản trước dùng `socket.io-client` nối tới netty-socketio ở cổng riêng 8081;
+backend đã bỏ hẳn thư viện đó nên client cũ không còn kết nối được.
+
+Toàn bộ tầng này nằm gọn trong `src/context/RealtimeContext.tsx`; phần còn lại
+của app chỉ thấy hook `useRealtime()` với API không đổi.
+
+| Việc | Destination |
+|---|---|
+| Tin nhắn đến | subscribe `/topic/user.<myId>/chat` |
+| Thông báo mới | subscribe `/topic/user.<myId>/notification` |
+| Trạng thái tin MÌNH gửi | subscribe `/topic/user.<myId>/message-status` |
+| Ack "đã nhận" | publish `/app/message.delivered` `{messageIds}` |
+| Ack "đã xem" | publish `/app/message.read` `{partnerId}` |
+
+Ba điểm khác bản socket.io, đều bắt buộc:
+
+- **Không còn tự vào phòng `user_<id>`** — client phải tự subscribe. Server chặn
+  destination mang id của người khác, nên đây cũng là ranh giới bảo mật chứ
+  không chỉ là thủ tục.
+- **Chỉ publish được vào `/app/**`**. Gửi thẳng vào `/topic/**` bị từ chối.
+- **Không còn tên sự kiện**, destination đóng vai trò đó — lỗi chính tả
+  `chat messsage` (ba chữ `s`) của bản cũ biến mất.
+
+Chi tiết hợp đồng và thông điệp lỗi:
+`lopet-be-java-springboot/docs/REALTIME_WEBSOCKET_MIGRATION.md`.
 
 ## Điểm cần biết về dữ liệu
 
@@ -117,8 +175,6 @@ hay mã nguồn của template thương mại nào.
 
 ## Chưa làm
 
-- Realtime: backend có socket.io nhưng frontend đang poll thủ công (tin nhắn,
-  thông báo).
 - Tìm kiếm chỉ tìm được **người theo tên** (`GET /v1/profiles?fullName=`) vì backend
   chưa có endpoint tìm bài viết hay nhóm.
 - Chưa có nạp tiền / quản lý ngân sách quảng cáo (backend cũng chưa có nghiệp vụ).

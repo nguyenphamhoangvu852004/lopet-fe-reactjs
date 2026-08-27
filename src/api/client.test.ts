@@ -5,11 +5,9 @@ import type {
 } from "axios";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  ACTIVE_PET_KEY,
   api,
   errorMessage,
   isForbidden,
-  REFRESH_KEY,
   refreshClient,
   SESSION_EXPIRED,
   TOKEN_KEY,
@@ -63,8 +61,12 @@ afterEach(() => {
   refreshClient.defaults.adapter = realRefreshAdapter;
 });
 
-/** Giả lập POST /v1/auth/refresh trả về cặp token mới; trả về danh sách lời gọi */
-function stubRefresh(accessToken: string, refreshToken = "refresh-moi") {
+/**
+ * Giả lập POST /v1/auth/refresh. Backend chỉ còn trả `{ id, accessToken }` —
+ * refresh token mới đi ra bằng header Set-Cookie mà trình duyệt tự nuốt, nên
+ * phản hồi ở đây cố ý KHÔNG có trường refreshToken.
+ */
+function stubRefresh(accessToken: string) {
   const calls: InternalAxiosRequestConfig[] = [];
   refreshClient.defaults.adapter = async (config) => {
     calls.push(config);
@@ -73,11 +75,18 @@ function stubRefresh(accessToken: string, refreshToken = "refresh-moi") {
       data: {
         statusCode: 200,
         message: "OK",
-        data: { id: 1, accessToken, refreshToken },
+        data: { id: 1, accessToken },
       },
     };
   };
   return calls;
+}
+
+/** Giả lập refresh hỏng (cookie hết hạn / không có cookie) */
+function stubRefreshFailure(message = "Refresh token không hợp lệ") {
+  refreshClient.defaults.adapter = async (config) => {
+    throw httpError(config, 401, message);
+  };
 }
 
 /** Lỗi axios đúng hình dạng mà interceptor đọc */
@@ -123,10 +132,10 @@ describe("interceptor request", () => {
 });
 
 describe("interceptor response", () => {
-  it("401 mà không còn refresh token thì xoá phiên và phát sự kiện", async () => {
+  it("401 mà cookie gia hạn cũng chết thì xoá phiên và phát sự kiện", async () => {
     localStorage.setItem(TOKEN_KEY, VALID_TOKEN);
     localStorage.setItem(USER_KEY, '{"id":1}');
-    localStorage.setItem(ACTIVE_PET_KEY, "3");
+    stubRefreshFailure();
 
     const onExpired = vi.fn();
     window.addEventListener(SESSION_EXPIRED, onExpired);
@@ -137,10 +146,7 @@ describe("interceptor response", () => {
 
     await expect(api.get("/me")).rejects.toThrow("401");
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
-    expect(localStorage.getItem(REFRESH_KEY)).toBeNull();
     expect(localStorage.getItem(USER_KEY)).toBeNull();
-    // Pet phải đi theo phiên, nếu không người đăng nhập sau gửi X-Pet-Id của người trước
-    expect(localStorage.getItem(ACTIVE_PET_KEY)).toBeNull();
     expect(onExpired).toHaveBeenCalledTimes(1);
 
     window.removeEventListener(SESSION_EXPIRED, onExpired);
@@ -170,7 +176,6 @@ describe("interceptor response", () => {
 describe("gia hạn phiên", () => {
   it("401 giữa phiên thì gia hạn rồi gửi lại chính request đó", async () => {
     localStorage.setItem(TOKEN_KEY, VALID_TOKEN);
-    localStorage.setItem(REFRESH_KEY, "refresh-cu");
     const refreshCalls = stubRefresh("access-moi");
 
     const onExpired = vi.fn();
@@ -186,12 +191,13 @@ describe("gia hạn phiên", () => {
     await expect(api.get("/me")).resolves.toBeTruthy();
 
     expect(refreshCalls).toHaveLength(1);
-    expect(String(refreshCalls[0].data)).toContain("refresh-cu");
+    // Không gửi refresh token trong body nữa — nó đi bằng cookie, và cookie chỉ
+    // được đính kèm khi request khai withCredentials.
+    expect(refreshCalls[0].data).toBeUndefined();
+    expect(refreshCalls[0].withCredentials).toBe(true);
     // Lần gửi lại phải mang token MỚI, không phải token vừa bị từ chối
     expect(sent).toEqual([`Bearer ${VALID_TOKEN}`, "Bearer access-moi"]);
-    // Backend xoay vòng cả hai token — quên ghi refresh token mới là phiên chết ở lần sau
     expect(localStorage.getItem(TOKEN_KEY)).toBe("access-moi");
-    expect(localStorage.getItem(REFRESH_KEY)).toBe("refresh-moi");
     expect(onExpired).not.toHaveBeenCalled();
 
     window.removeEventListener(SESSION_EXPIRED, onExpired);
@@ -204,7 +210,6 @@ describe("gia hạn phiên", () => {
    */
   it("500 kèm message 'jwt expired' cũng được coi là token hỏng", async () => {
     localStorage.setItem(TOKEN_KEY, VALID_TOKEN);
-    localStorage.setItem(REFRESH_KEY, "refresh-cu");
     stubRefresh("access-moi");
 
     let calls = 0;
@@ -220,7 +225,6 @@ describe("gia hạn phiên", () => {
 
   it("500 vì lỗi server thật thì KHÔNG gia hạn", async () => {
     localStorage.setItem(TOKEN_KEY, VALID_TOKEN);
-    localStorage.setItem(REFRESH_KEY, "refresh-cu");
     const refreshCalls = stubRefresh("access-moi");
 
     stubAdapter(async (config) => {
@@ -233,7 +237,6 @@ describe("gia hạn phiên", () => {
 
   it("nhiều request cùng dính 401 chỉ gọi refresh MỘT lần", async () => {
     localStorage.setItem(TOKEN_KEY, VALID_TOKEN);
-    localStorage.setItem(REFRESH_KEY, "refresh-cu");
     const refreshCalls = stubRefresh("access-moi");
 
     const rejected = new Set<string>();
@@ -255,10 +258,7 @@ describe("gia hạn phiên", () => {
 
   it("gia hạn thất bại thì kết thúc phiên và ném lỗi GỐC", async () => {
     localStorage.setItem(TOKEN_KEY, VALID_TOKEN);
-    localStorage.setItem(REFRESH_KEY, "refresh-het-han");
-    refreshClient.defaults.adapter = async (config) => {
-      throw httpError(config, 401, "Refresh token đã hết hạn");
-    };
+    stubRefreshFailure("Refresh token đã hết hạn");
 
     const onExpired = vi.fn();
     window.addEventListener(SESSION_EXPIRED, onExpired);
@@ -269,7 +269,6 @@ describe("gia hạn phiên", () => {
 
     await expect(api.get("/me")).rejects.toThrow("Không tìm thấy bài viết");
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
-    expect(localStorage.getItem(REFRESH_KEY)).toBeNull();
     expect(onExpired).toHaveBeenCalledTimes(1);
 
     window.removeEventListener(SESSION_EXPIRED, onExpired);
@@ -277,7 +276,6 @@ describe("gia hạn phiên", () => {
 
   it("token mới vẫn bị từ chối thì dừng lại, không lặp vô hạn", async () => {
     localStorage.setItem(TOKEN_KEY, VALID_TOKEN);
-    localStorage.setItem(REFRESH_KEY, "refresh-cu");
     stubRefresh("access-moi");
 
     let calls = 0;
@@ -293,7 +291,6 @@ describe("gia hạn phiên", () => {
 
   it("access token hết hạn thì gia hạn TRƯỚC khi gửi request", async () => {
     localStorage.setItem(TOKEN_KEY, EXPIRED_TOKEN);
-    localStorage.setItem(REFRESH_KEY, "refresh-cu");
     const refreshCalls = stubRefresh("access-moi");
 
     let sent: InternalAxiosRequestConfig | undefined;
@@ -309,12 +306,34 @@ describe("gia hạn phiên", () => {
     expect(sent?.headers.Authorization).toBe("Bearer access-moi");
   });
 
+  /**
+   * Cookie là HttpOnly nên client KHÔNG biết phiên còn sống hay không; thứ duy
+   * nhất kiểm được là "máy này đã từng đăng nhập" — tức là có access token
+   * trong localStorage. Thiếu chốt này thì mỗi 401 ở route công khai lại kéo
+   * theo một lời gọi gia hạn và một sự kiện hết phiên cho phiên chưa từng có.
+   */
   it("chưa đăng nhập thì không gọi refresh", async () => {
     const refreshCalls = stubRefresh("access-moi");
     stubAdapter(async (config) => ok(config));
 
     await api.get("/posts");
     expect(refreshCalls).toHaveLength(0);
+  });
+
+  it("401 lúc chưa đăng nhập thì không gọi refresh và không phát hết phiên", async () => {
+    const refreshCalls = stubRefresh("access-moi");
+    const onExpired = vi.fn();
+    window.addEventListener(SESSION_EXPIRED, onExpired);
+
+    stubAdapter(async (config) => {
+      throw httpError(config, 401);
+    });
+
+    await expect(api.get("/posts")).rejects.toThrow("401");
+    expect(refreshCalls).toHaveLength(0);
+    expect(onExpired).not.toHaveBeenCalled();
+
+    window.removeEventListener(SESSION_EXPIRED, onExpired);
   });
 });
 

@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Group, GroupInvite, PetListItem } from "../types";
+import type { Group, GroupInvite } from "../types";
 import { GroupDetailPage, GroupsPage } from "./Groups";
 
 /**
@@ -36,7 +36,7 @@ vi.mock("../api/endpoints", () => ({
     acceptInvite: vi.fn(),
     rejectInvite: vi.fn(),
   },
-  petProfileApi: { byHandle: vi.fn() },
+  friendApi: { listOf: vi.fn() },
   postApi: { feed: vi.fn() },
 }));
 
@@ -48,8 +48,8 @@ vi.mock("../components/post/PostComposer", () => ({
 vi.mock("../components/report/ReportDialog", () => ({
   ReportDialog: () => null,
 }));
-vi.mock("../hooks/usePetProfileLite", () => ({
-  prefetchPetProfiles: vi.fn(),
+vi.mock("../hooks/useAccountProfileLite", () => ({
+  prefetchAccountProfiles: vi.fn(),
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -66,33 +66,7 @@ let auth = {
 };
 vi.mock("../context/AuthContext", () => ({ useAuth: () => auth }));
 
-const activePet: PetListItem = {
-  petId: 1,
-  name: "Milo",
-  species: "DOG",
-  gender: "MALE",
-  dateOfBirth: "2023-03-12",
-  status: "ACTIVE",
-  profile: {
-    handle: "milo",
-    displayName: "Milo",
-    avatarUrl: null,
-    bio: "",
-    visibility: "PUBLIC",
-  },
-};
-
-let petCtx = {
-  pets: [activePet],
-  activePet: activePet as PetListItem | null,
-  activePetId: 1 as number | null,
-  ready: true,
-  select: vi.fn(),
-  reload: vi.fn().mockResolvedValue(undefined),
-};
-vi.mock("../context/PetContext", () => ({ useActivePet: () => petCtx }));
-
-const { groupApi, postApi } = await import("../api/endpoints");
+const { friendApi, groupApi, postApi } = await import("../api/endpoints");
 
 function group(over: Partial<Group> = {}): Group {
   return {
@@ -101,7 +75,7 @@ function group(over: Partial<Group> = {}): Group {
     type: "PUBLIC",
     bio: "",
     coverUrl: "",
-    ownerPetId: 99,
+    ownerAccountId: 99,
     totalMembers: 3,
     members: [],
     restricted: false,
@@ -115,12 +89,11 @@ function invite(over: Partial<GroupInvite> = {}): GroupInvite {
     groupId: 5,
     groupName: "Hội những người nuôi mèo",
     groupType: "PRIVATE",
-    petId: 1,
+    accountId: 1,
     invitedBy: {
-      petId: 42,
-      name: "Bơ",
-      handle: "bo",
-      displayName: "Bơ",
+      accountId: 42,
+      username: "bo",
+      fullName: "Bơ",
       avatarUrl: "",
     },
     invitedAt: new Date().toISOString(),
@@ -141,15 +114,11 @@ function renderDetail() {
 beforeEach(() => {
   vi.clearAllMocks();
   auth = { user: { id: 7, username: "vu", roles: [] }, can: () => true };
-  petCtx = {
-    pets: [activePet],
-    activePet,
-    activePetId: 1,
-    ready: true,
-    select: vi.fn(),
-    reload: vi.fn().mockResolvedValue(undefined),
-  };
   vi.mocked(postApi.feed).mockResolvedValue([]);
+  vi.mocked(friendApi.listOf).mockResolvedValue({
+    me: { id: 7, username: "vu" },
+    others: [],
+  });
   vi.mocked(groupApi.joinRequests).mockResolvedValue([]);
   vi.mocked(groupApi.myInvites).mockResolvedValue([]);
   vi.mocked(groupApi.suggest).mockResolvedValue([]);
@@ -162,7 +131,7 @@ describe("Nút quan hệ với nhóm", () => {
     );
     vi.mocked(groupApi.join).mockResolvedValue({
       groupId: 5,
-      petId: 1,
+      accountId: 7,
       status: "ACTIVE",
     });
     renderDetail();
@@ -222,7 +191,7 @@ describe("Nút quan hệ với nhóm", () => {
     vi.mocked(groupApi.detail).mockResolvedValue(
       group({
         viewerStatus: "MEMBER",
-        members: [{ groupId: 5, petId: 1, role: "MEMBER" }],
+        members: [{ groupId: 5, accountId: 7, role: "MEMBER" }],
       }),
     );
     renderDetail();
@@ -236,7 +205,7 @@ describe("Nút quan hệ với nhóm", () => {
     vi.mocked(groupApi.detail).mockResolvedValue(
       group({
         viewerStatus: "MEMBER",
-        members: [{ groupId: 5, petId: 1, role: "OWNER" }],
+        members: [{ groupId: 5, accountId: 7, role: "OWNER" }],
       }),
     );
     renderDetail();
@@ -248,16 +217,6 @@ describe("Nút quan hệ với nhóm", () => {
     expect(screen.getByText(/không rời nhóm được/i)).toBeInTheDocument();
   });
 
-  /** Mọi hành động ở đây cần `X-Pet-Id`; chặn kèm lý do thay vì để nhận lỗi 400 */
-  it("chưa chọn thú cưng: nút bị chặn", async () => {
-    petCtx = { ...petCtx, activePet: null, activePetId: null };
-    vi.mocked(groupApi.detail).mockResolvedValue(group());
-    renderDetail();
-
-    expect(
-      await screen.findByRole("button", { name: "Chọn bé để tham gia" }),
-    ).toBeDisabled();
-  });
 });
 
 describe("Nhóm riêng tư với người ngoài", () => {
@@ -291,7 +250,7 @@ describe("Nhóm riêng tư với người ngoài", () => {
         type: "PRIVATE",
         restricted: false,
         viewerStatus: "MEMBER",
-        members: [{ groupId: 5, petId: 1, role: "MEMBER" }],
+        members: [{ groupId: 5, accountId: 7, role: "MEMBER" }],
       }),
     );
     renderDetail();
@@ -308,7 +267,7 @@ describe("Yêu cầu tham gia — phía quản trị nhóm", () => {
     group({
       type: "PRIVATE",
       viewerStatus: "MEMBER",
-      members: [{ groupId: 5, petId: 1, role: "ADMIN" }],
+      members: [{ groupId: 5, accountId: 7, role: "ADMIN" }],
     });
 
   it("quản trị viên duyệt được yêu cầu", async () => {
@@ -316,12 +275,11 @@ describe("Yêu cầu tham gia — phía quản trị nhóm", () => {
     vi.mocked(groupApi.joinRequests).mockResolvedValue([
       {
         groupId: 5,
-        petId: 77,
-        pet: {
-          petId: 77,
-          name: "Đậu",
-          handle: "dau",
-          displayName: "Đậu",
+        accountId: 77,
+        account: {
+          accountId: 77,
+          username: "dau",
+          fullName: "Đậu",
           avatarUrl: "",
         },
         requestedAt: new Date().toISOString(),
@@ -347,7 +305,7 @@ describe("Yêu cầu tham gia — phía quản trị nhóm", () => {
     vi.mocked(groupApi.detail).mockResolvedValue(
       group({
         viewerStatus: "MEMBER",
-        members: [{ groupId: 5, petId: 1, role: "MEMBER" }],
+        members: [{ groupId: 5, accountId: 7, role: "MEMBER" }],
       }),
     );
     renderDetail();
@@ -388,13 +346,4 @@ describe("Hộp thư lời mời", () => {
     expect(groupApi.acceptInvite).toHaveBeenCalledWith(5);
   });
 
-  it("chưa chọn bé thì không gọi API và nói rõ lý do", async () => {
-    petCtx = { ...petCtx, activePet: null, activePetId: null };
-    renderList();
-
-    await userEvent.click(await screen.findByRole("button", { name: "Lời mời" }));
-    expect(screen.getByText("Chưa chọn thú cưng nào")).toBeInTheDocument();
-    // Thiếu X-Pet-Id thì request chỉ nhận 400 mà người dùng không sửa được
-    expect(groupApi.myInvites).not.toHaveBeenCalled();
-  });
 });

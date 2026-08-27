@@ -47,7 +47,7 @@ export function NotificationBell() {
     }
   }, [user]);
 
-  // Nạp lại mỗi khi có thông báo mới bay về qua socket. Nhờ vậy panel luôn hiển
+  // Nạp lại mỗi khi có thông báo mới bay về qua realtime. Nhờ vậy panel luôn hiển
   // thị bản chính thức từ REST (có notificationId để đánh dấu đã đọc) thay vì
   // phải trộn hai nguồn và tự khử trùng lặp giữa chúng.
   useEffect(() => {
@@ -79,16 +79,16 @@ export function NotificationBell() {
    * Số chưa đọc lấy TỪ MỘT NGUỒN: danh sách vừa nạp từ REST.
    *
    * Bản trước cộng `storedUnread + unreadNotifications`, tức là cộng cả bộ đếm
-   * socket vào danh sách REST — mà danh sách đó đã được nạp lại ngay khi sự
-   * kiện socket tới, nên cùng một thông báo bị đếm hai lần và huy hiệu luôn
-   * gấp đôi sự thật. Bộ đếm socket giờ chỉ còn là đường lui cho lúc REST hỏng.
+   * realtime vào danh sách REST — mà danh sách đó đã được nạp lại ngay khi sự
+   * kiện realtime tới, nên cùng một thông báo bị đếm hai lần và huy hiệu luôn
+   * gấp đôi sự thật. Bộ đếm realtime giờ chỉ còn là đường lui khi REST hỏng.
    */
   const unreadFromApi = items.filter((n) => n.status !== "READ").length;
   const unread = error ? unreadNotifications : unreadFromApi;
 
   function toggle() {
     setOpen((value) => {
-      // Mở ra là coi như đã thấy: dọn bộ đếm socket để nó không cộng dồn mãi
+      // Mở ra là coi như đã thấy: dọn bộ đếm realtime để nó không cộng dồn mãi
       if (!value) clearNotificationBadge();
       return !value;
     });

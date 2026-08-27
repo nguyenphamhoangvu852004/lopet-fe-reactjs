@@ -1,26 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { groupApi } from "../api/endpoints";
-import { useActivePet } from "../context/PetContext";
+import { useAuth } from "../context/AuthContext";
 import type { GroupInvite } from "../types";
 
 /**
- * Lời mời vào nhóm đang chờ THÚ CƯNG ĐANG THAO TÁC trả lời.
+ * Lời mời vào nhóm đang chờ NGƯỜI DÙNG trả lời.
  *
- * Hộp thư này gắn với con vật, không với tài khoản: backend đọc `X-Pet-Id` và
- * không nhận id nào trong URL. Vì thế danh sách phải tải LẠI mỗi khi người dùng
- * đổi bé — giữ nguyên kết quả cũ sẽ hiện lời mời của con trước cho con sau, và
- * bấm chấp nhận thì backend trả 404 vì không có lời mời nào cho con đang chọn.
- *
- * Chưa chọn bé thì trả mảng rỗng mà KHÔNG gọi API: request thiếu `X-Pet-Id` chỉ
- * nhận về 400 rồi hiện một lỗi mà người dùng không sửa được bằng cách nào.
+ * Backend đọc danh tính từ token và không nhận id nào trong URL. Khách chưa đăng
+ * nhập thì trả mảng rỗng mà KHÔNG gọi API: request không có token chỉ nhận về
+ * 401 rồi hiện một lỗi mà người dùng không sửa được bằng cách nào.
  */
 export function useGroupInvites() {
-  const { activePetId } = useActivePet();
+  const { user } = useAuth();
   const [invites, setInvites] = useState<GroupInvite[]>([]);
   const [loading, setLoading] = useState(false);
 
   const reload = useCallback(async () => {
-    if (!activePetId) {
+    if (!user) {
       setInvites([]);
       return;
     }
@@ -34,7 +30,7 @@ export function useGroupInvites() {
     } finally {
       setLoading(false);
     }
-  }, [activePetId]);
+  }, [user]);
 
   useEffect(() => {
     reload();
