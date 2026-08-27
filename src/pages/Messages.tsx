@@ -147,13 +147,13 @@ export function MessagesPage() {
   const contentRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // Người đang mở chat, giữ trong ref để handler socket không cần dựng lại
+  // Người đang mở chat, giữ trong ref để handler realtime không cần dựng lại
   const activeIdRef = useRef<number | null>(null);
   const stickToBottom = useRef(true);
   /**
-   * Trạng thái đến qua socket, giữ lại theo id tin nhắn.
+   * Trạng thái đến qua realtime, giữ lại theo id tin nhắn.
    *
-   * Cần cái này vì sự kiện `message status` thường về TRƯỚC khi danh sách tin
+   * Cần cái này vì sự kiện trạng thái thường về TRƯỚC khi danh sách tin
    * chứa tin vừa gửi: `send()` phải đợi `loadThread()` mới biết id thật, trong
    * khi đối phương ack "đã nhận" chỉ sau vài chục ms. Sự kiện tới lúc đó không
    * khớp được với tin nào trong state và sẽ mất luôn — còn `loadThread` thì có
@@ -161,7 +161,7 @@ export function MessagesPage() {
    * Kết quả: tin đứng mãi ở "Đã gửi" dù đối phương đã nhận.
    *
    * Nhớ ở đây rồi áp lại lên mọi danh sách nạp từ server thì thứ tự đến của hai
-   * đường (HTTP và socket) không còn quan trọng nữa.
+   * đường (HTTP và WebSocket) không còn quan trọng nữa.
    */
   const statusOverrides = useRef(
     new Map<number, { status: MessageStatus; at?: string | null }>(),
@@ -214,7 +214,7 @@ export function MessagesPage() {
        * chứ không riêng cái đang mở.
        *
        * Đây là đường bù cho khoảng thời gian offline: tin đến lúc app đóng thì
-       * không có socket nào nhận để mà ack tại chỗ, nên phải quét lại ở lần
+       * không có kết nối nào nhận để mà ack tại chỗ, nên phải quét lại ở lần
        * tải danh sách đầu tiên. Gộp thành MỘT request cho tất cả — backend
        * nhận cả lô và chỉ bắn một sự kiện cho mỗi người gửi.
        */
@@ -250,7 +250,7 @@ export function MessagesPage() {
    *
    * Một lời gọi cho CẢ hội thoại, không phải mỗi tin một request: backend có
    * sẵn `PATCH /v1/messages/read?partnerId=` làm đúng việc đó trong một câu
-   * UPDATE, và chỉ bắn đúng một sự kiện socket về người gửi thay vì n cái.
+   * UPDATE, và chỉ bắn đúng một sự kiện realtime về người gửi thay vì n cái.
    */
   const markRead = useCallback(
     (list: Message[]) => {
@@ -324,7 +324,7 @@ export function MessagesPage() {
   }, [activeId, loadThread]);
 
   /**
-   * Tin đến qua socket. Payload chỉ có { content, senderId, receiverId,
+   * Tin đến qua realtime. Payload chỉ có { content, senderId, receiverId,
    * imageUrl } — thiếu id, createdAt và status — nên không dựng bong bóng từ nó
    * mà nạp lại hội thoại để lấy bản đầy đủ.
    */

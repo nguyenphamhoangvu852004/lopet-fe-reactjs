@@ -8,55 +8,49 @@ export const BASE_URL =
   import.meta.env.VITE_BACKEND_API ?? "http://localhost:8080";
 
 /**
- * Socket.IO của backend Spring Boot nghe cổng riêng (netty-socketio, mặc định
- * 8081) vì Tomcat đã chiếm cổng REST — không dùng chung BASE_URL được.
- * Đặt VITE_SOCKET_URL khi deploy sau reverse proxy định tuyến /socket.io/.
+ * Realtime là STOMP over WebSocket trên CHÍNH cổng REST (backend endpoint
+ * `/ws`), nên URL suy ra thẳng từ BASE_URL: http → ws, https → wss. Bản trước
+ * dùng netty-socketio ở cổng riêng 8081 và cần một biến môi trường thứ hai —
+ * biến đó đã bỏ, chỉ còn VITE_WS_URL làm đường ghi đè khi proxy đặt `/ws` ở
+ * host khác.
  */
-export const SOCKET_URL =
-  import.meta.env.VITE_SOCKET_URL ?? "http://localhost:8081";
+export const WS_URL =
+  import.meta.env.VITE_WS_URL ??
+  `${BASE_URL.replace(/\/+$/, "").replace(/^http/, "ws")}/ws`;
 
 export const TOKEN_KEY = "accessToken";
-export const REFRESH_KEY = "refreshToken";
 export const USER_KEY = "user";
-/** Thú cưng đang thao tác — xem ghi chú ở activePetId bên dưới */
-export const ACTIVE_PET_KEY = "lopet:activePetId";
 
 /**
- * Backend lấy PET làm chủ thể của mọi nội dung xã hội: bài viết, bình luận,
- * lượt thích và tư cách thành viên nhóm đều trỏ vào `pets.id`. Endpoint ghi vì
- * thế mang `@RequirePet` và đòi header `X-Pet-Id`; interceptor xác nhận con vật
- * đó thuộc tài khoản trong JWT rồi mới cho controller chạy.
+ * Refresh token KHÔNG còn nằm trong localStorage: backend trả nó bằng cookie
+ * `HttpOnly` (xem RefreshTokenCookie phía Spring), nên JavaScript không đọc,
+ * không ghi và không gửi nó đi được nữa. Chìa khoá duy nhất mà XSS lấy được từ
+ * localStorage giờ là access token sống 1 giờ, thay vì thứ gia hạn được phiên
+ * suốt 10 giờ.
  *
- * Giữ ở biến module thay vì đọc localStorage trong interceptor: `PetContext` là
- * nguồn sự thật của UI, và một request bay đi ngay sau khi người dùng đổi pet
- * phải mang giá trị MỚI chứ không phải giá trị đã kịp ghi xuống đĩa hay chưa.
- * localStorage chỉ dùng để khôi phục lựa chọn sau khi tải lại trang.
- *
- * Không import từ context vào đây: chiều phụ thuộc phải là context → client,
- * ngược lại sẽ thành vòng tròn (context dùng api, api dùng context).
+ * Hệ quả với code phía dưới: mọi câu hỏi kiểu "còn refresh token không?" đều
+ * không trả lời được ở client. Chỗ thay thế là sự tồn tại của access token —
+ * có token (dù đã hết hạn) nghĩa là đã từng đăng nhập, và đó là điều kiện duy
+ * nhất để thử gia hạn.
  */
-let activePetId: number | null = readStoredPetId();
-
-function readStoredPetId(): number | null {
-  const raw = localStorage.getItem(ACTIVE_PET_KEY);
-  const parsed = raw ? Number(raw) : NaN;
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-export function getActivePetId() {
-  return activePetId;
-}
-
-/** Gọi bởi PetProvider mỗi khi người dùng đổi thú cưng đang thao tác */
-export function setActivePetId(petId: number | null) {
-  activePetId = petId;
-  if (petId) localStorage.setItem(ACTIVE_PET_KEY, String(petId));
-  else localStorage.removeItem(ACTIVE_PET_KEY);
-}
+const LEGACY_REFRESH_KEY = "refreshToken";
+// Dọn token của bản cũ ngay khi module nạp: người dùng đang có phiên từ bản
+// trước vẫn còn một refresh token nằm trong localStorage, và nó vô dụng với
+// backend mới. Để lại chỉ là một bí mật nằm phơi không ai dùng.
+localStorage.removeItem(LEGACY_REFRESH_KEY);
 
 export const api = axios.create({
   baseURL: BASE_URL,
   headers: { "Content-Type": "application/json" },
+  /**
+   * BẮT BUỘC: cookie refresh token chỉ được trình duyệt lưu (lúc đăng nhập) và
+   * gửi kèm (lúc gia hạn) khi request khai `credentials: 'include'`. Thiếu cờ
+   * này thì đăng nhập vẫn chạy nhưng phiên chết cứng sau 1 giờ.
+   *
+   * Kèm theo: backend phải khai `DOMAIN_CORS` là origin cụ thể của FE — bên đó
+   * chỉ bật `allowCredentials` khi danh sách origin không phải `*`.
+   */
+  withCredentials: true,
 });
 
 api.interceptors.request.use(async (config) => {
@@ -72,15 +66,10 @@ api.interceptors.request.use(async (config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
 
   /**
-   * Gắn cho MỌI request thay vì chỉ các endpoint ghi. Với endpoint đọc, header
-   * là tuỳ chọn và chỉ MỞ RỘNG phạm vi thấy được (bài do chính pet đó đăng, bài
-   * trong nhóm mà pet đó là thành viên) — gửi thừa không hại gì, còn quên gửi
-   * thì người dùng mất đúng phần nội dung của con vật mình đang chọn.
-   *
-   * Endpoint không mang @RequirePet cũng bỏ qua header này, nên không có nguy
-   * cơ một route nào đó bất ngờ đổi hành vi vì nó xuất hiện.
+   * Không còn header danh tính nào ngoài `Authorization`. Danh tính người gọi —
+   * cả "là ai" lẫn "hành động nhân danh ai" — đến duy nhất từ token đã ký; mọi
+   * thứ client tự khai đều không được backend tin.
    */
-  if (activePetId) config.headers["X-Pet-Id"] = String(activePetId);
   return config;
 });
 
@@ -89,8 +78,8 @@ export const SESSION_EXPIRED = "lopet:session-expired";
 
 /**
  * Phát mỗi khi cặp token được thay mới. Cần vì access token còn được dùng NGOÀI
- * axios: socket gửi nó một lần duy nhất trong handshake, nên nơi giữ kết nối
- * phải biết mà cập nhật, nếu không lần kết nối lại nào cũng cầm token đã chết.
+ * axios: WebSocket gửi nó một lần duy nhất trong frame CONNECT, nên nơi giữ kết
+ * nối phải biết mà cập nhật, nếu không lần kết nối lại nào cũng cầm token đã chết.
  */
 export const SESSION_REFRESHED = "lopet:session-refreshed";
 
@@ -104,17 +93,31 @@ export const SESSION_REFRESHED = "lopet:session-refreshed";
 export const refreshClient = axios.create({
   baseURL: BASE_URL,
   headers: { "Content-Type": "application/json" },
+  // Cookie refresh token là TOÀN BỘ dữ liệu đầu vào của lời gọi này
+  withCredentials: true,
 });
 
-/** Xoá sạch dấu vết phiên và báo cho AuthContext */
+/**
+ * Xoá sạch dấu vết phiên và báo cho AuthContext.
+ *
+ * Cookie refresh token thì client KHÔNG xoá được (`HttpOnly`), nên nó nằm lại
+ * tới khi hết hạn. Không sao: mọi đường dùng tới nó đều đi qua access token đã
+ * bị xoá ở đây, và backend vẫn kiểm tài khoản từ DB ở mỗi lần gia hạn. Muốn xoá
+ * thật thì cần một endpoint logout phía backend (`RefreshTokenCookie.clear`).
+ */
 export function endSession() {
   localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(USER_KEY);
-  // Pet đang chọn thuộc về phiên vừa kết thúc — giữ lại thì người đăng nhập
-  // sau sẽ gửi X-Pet-Id của người trước và nhận 403 khó hiểu.
-  setActivePetId(null);
+  localStorage.removeItem(LEGACY_REFRESH_KEY);
   window.dispatchEvent(new CustomEvent(SESSION_EXPIRED));
+}
+
+/**
+ * Ghi lại access token vừa nhận. Dùng ở màn hình đăng nhập — sau lời gọi này
+ * client coi như "đã có phiên", kể cả khi access token hết hạn sau đó.
+ */
+export function startSession(accessToken: string) {
+  localStorage.setItem(TOKEN_KEY, accessToken);
 }
 
 /**
@@ -126,25 +129,30 @@ export function endSession() {
 let pendingRefresh: Promise<string> | null = null;
 
 /**
- * Đổi refresh token lấy cặp token mới. Backend xoay vòng cả hai (POST
- * /v1/auth/refresh) nên PHẢI ghi lại cả refreshToken, không chỉ accessToken.
+ * Xin access token mới. KHÔNG có body: refresh token đi kèm dưới dạng cookie,
+ * và backend xoay vòng nó bằng một `Set-Cookie` khác trong chính phản hồi này —
+ * client không thấy, cũng không cần thấy.
+ *
+ * Điều kiện duy nhất kiểm được ở đây là "đã từng đăng nhập". Không có access
+ * token thì không gọi: một khách vãng lai gặp 401 ở route công khai sẽ kéo theo
+ * một lời gọi gia hạn chắc chắn hỏng, và kết thúc bằng sự kiện SESSION_EXPIRED
+ * cho một phiên chưa từng tồn tại.
  */
 export function refreshSession(): Promise<string> {
   if (pendingRefresh) return pendingRefresh;
 
-  const refreshToken = localStorage.getItem(REFRESH_KEY);
-  if (!refreshToken) return Promise.reject(new Error("Chưa có refresh token"));
+  if (!localStorage.getItem(TOKEN_KEY)) {
+    return Promise.reject(new Error("Chưa đăng nhập"));
+  }
 
   pendingRefresh = refreshClient
-    .post("/v1/auth/refresh", { refreshToken })
+    .post("/v1/auth/refresh")
     .then((res) => {
-      const data = (res.data as { data?: { accessToken?: string; refreshToken?: string } })
-        ?.data;
-      if (!data?.accessToken || !data?.refreshToken) {
-        throw new Error("Phản hồi gia hạn thiếu token");
+      const data = (res.data as { data?: { accessToken?: string } })?.data;
+      if (!data?.accessToken) {
+        throw new Error("Phản hồi gia hạn thiếu access token");
       }
       localStorage.setItem(TOKEN_KEY, data.accessToken);
-      localStorage.setItem(REFRESH_KEY, data.refreshToken);
       window.dispatchEvent(new CustomEvent(SESSION_REFRESHED));
       return data.accessToken;
     })
@@ -156,16 +164,19 @@ export function refreshSession(): Promise<string> {
 }
 
 /**
- * Gia hạn nếu access token đã hết hạn (hoặc không còn) mà refresh token vẫn
- * còn. Gọi được thoải mái: không có gì để làm thì trả về ngay.
+ * Gia hạn nếu access token đã hết hạn (hoặc không còn). Gọi được thoải mái:
+ * không có gì để làm thì trả về ngay.
  *
  * Dùng ở hai chỗ — trước mỗi request, và lúc AuthProvider khởi động (mở lại tab
- * sau một giờ thì access token đã chết nhưng phiên thì chưa).
+ * sau một giờ thì access token đã chết nhưng cookie refresh token thì chưa).
  */
 export async function ensureFreshSession(): Promise<void> {
   const stored = localStorage.getItem(TOKEN_KEY);
-  const payload = decodeToken(stored);
+  // Chưa từng đăng nhập trên máy này: không có gì để gia hạn, và cũng không có
+  // cách nào biết cookie còn sống hay không vì nó là HttpOnly.
+  if (!stored) return;
 
+  const payload = decodeToken(stored);
   if (payload && !isExpired(payload)) return;
   /**
    * Có token nhưng không giải mã được thì ĐỂ SERVER phán, đừng tự gia hạn: nếu
@@ -173,8 +184,7 @@ export async function ensureFreshSession(): Promise<void> {
    * lời gọi /v1/auth/refresh, và cặp token mới cũng không giải mã được — vòng
    * lặp không có điểm dừng. Đường phản ứng theo mã lỗi ở dưới xử lý ca này.
    */
-  if (stored && !payload) return;
-  if (!localStorage.getItem(REFRESH_KEY)) return;
+  if (!payload) return;
 
   try {
     await refreshSession();
@@ -214,6 +224,14 @@ api.interceptors.response.use(
     // 403 mang nghĩa "thiếu quyền" chứ không phải "token hỏng" — không đụng tới phiên.
     const config = error.config as RetriedConfig | undefined;
     if (!config || !isSessionError(error)) return Promise.reject(error);
+
+    /**
+     * Chưa đăng nhập thì 401 là câu trả lời đúng của server, không phải phiên
+     * hỏng. Bỏ chốt này thì khách vãng lai chạm một route cần đăng nhập sẽ kéo
+     * theo một lời gọi gia hạn chắc chắn hỏng và một sự kiện SESSION_EXPIRED
+     * cho phiên chưa từng tồn tại — màn hình chớp về trang đăng nhập vô cớ.
+     */
+    if (!localStorage.getItem(TOKEN_KEY)) return Promise.reject(error);
 
     if (config.retriedAfterRefresh) {
       // Token vừa cấp mà vẫn bị từ chối: hết cách, phiên coi như chấm dứt.
@@ -268,16 +286,3 @@ export function isForbidden(error: unknown) {
   return (error as AxiosError)?.response?.status === 403;
 }
 
-/**
- * Lỗi phát sinh vì tài khoản CHƯA CÓ thú cưng nào, hoặc chưa chọn con nào để
- * thao tác. Backend trả 403 kèm hướng dẫn tạo pet (NoPetOwnedException) và 400
- * khi thiếu header (MissingPetHeaderException) — hai mã khác nhau nhưng với
- * giao diện thì cùng một việc: mời người dùng tạo/chọn thú cưng.
- */
-export function isPetContextError(error: unknown) {
-  const err = error as AxiosError<{ message?: string }>;
-  const status = err?.response?.status;
-  if (status !== 400 && status !== 403) return false;
-  const message = err.response?.data?.message ?? "";
-  return /pet|thú cưng|X-Pet-Id/i.test(message);
-}

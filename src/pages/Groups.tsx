@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { errorMessage } from "../api/client";
-import { groupApi, petProfileApi, postApi } from "../api/endpoints";
+import { friendApi, groupApi, postApi } from "../api/endpoints";
 import { PostCard } from "../components/post/PostCard";
 import { PostComposer } from "../components/post/PostComposer";
 import { ReportDialog } from "../components/report/ReportDialog";
@@ -19,16 +19,15 @@ import {
   timeAgo,
 } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
-import { useActivePet } from "../context/PetContext";
 import { useGroupInvites } from "../hooks/useGroupInvites";
-import { prefetchPetProfiles } from "../hooks/usePetProfileLite";
+import { prefetchAccountProfiles } from "../hooks/useAccountProfileLite";
 import type {
   Group,
   GroupInvite,
   GroupJoinRequest,
   GroupType,
   Post,
-  PublicPetProfile,
+  FriendEntry,
 } from "../types";
 
 type Tab = "suggest" | "joined" | "owned" | "invites";
@@ -61,8 +60,8 @@ export function GroupsPage() {
 
   const load = useCallback(async () => {
     if (!user) return;
-    // Tab lời mời có nguồn dữ liệu riêng (theo thú cưng, không theo tài khoản)
-    // nên useGroupInvites lo phần đó, ở đây không gọi gì.
+    // Tab lời mời có nguồn dữ liệu riêng nên useGroupInvites lo phần đó,
+    // ở đây không gọi gì.
     if (tab === "invites") {
       setLoading(false);
       return;
@@ -162,7 +161,6 @@ function InviteInbox({
   invites: GroupInvite[];
   onAnswered: () => void;
 }) {
-  const { activePet } = useActivePet();
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState("");
 
@@ -180,22 +178,12 @@ function InviteInbox({
     }
   }
 
-  if (!activePet) {
-    return (
-      <EmptyState
-        icon="🐾"
-        title="Chưa chọn thú cưng nào"
-        hint="Lời mời gửi cho từng bé, nên hãy chọn một bé để xem hộp thư của bé đó."
-      />
-    );
-  }
-
   if (invites.length === 0) {
     return (
       <EmptyState
         icon="📭"
         title="Không có lời mời nào"
-        hint={`${activePet.profile.displayName} chưa được mời vào nhóm nào.`}
+        hint="Bạn chưa được mời vào nhóm nào."
       />
     );
   }
@@ -205,7 +193,7 @@ function InviteInbox({
       <Alert>{error}</Alert>
       {invites.map((invite) => {
         const inviter =
-          invite.invitedBy?.displayName || invite.invitedBy?.name || "";
+          invite.invitedBy?.fullName || invite.invitedBy?.username || "";
         return (
           <div key={invite.groupId} className="row">
             <Avatar name={invite.groupName} size={44} />
@@ -358,113 +346,110 @@ function GroupFormModal({
 }
 
 /**
- * Mời thành viên — tra theo HANDLE của thú cưng.
+ * Mời thành viên — chọn từ DANH SÁCH BẠN BÈ.
  *
- * Thành viên nhóm nay là con vật (`group_members.pet_id`), nên danh sách tài
- * khoản không còn dùng được ở đây. Backend cũng chỉ có đúng một đường tra cứu
- * công khai: `GET /v1/pet-profiles/handle/{handle}` — tra chính xác, không có
- * tìm mờ. Vì thế ô nhập yêu cầu handle đầy đủ thay vì gợi ý khi gõ.
+ * Backend không có endpoint tìm tài khoản theo username, và hồ sơ chỉ tra được
+ * theo từng id một, nên không có đường "gõ tên rồi tìm" nào để dựng. Bạn bè thì
+ * `GET /v1/friendships/{id}` trả sẵn kèm id tài khoản — vừa là nguồn dữ liệu duy
+ * nhất dùng được, vừa đúng thứ người dùng thường muốn mời.
  *
  * MỌI thành viên đều mời được, không riêng quản trị viên: lời mời chỉ tạo một hàng
  * chờ và không cấp quyền đọc gì cho tới khi người được mời đồng ý.
  */
 function InviteBox({
   groupId,
-  memberPetIds,
+  memberAccountIds,
   onInvited,
 }: {
   groupId: number;
-  memberPetIds: number[];
+  memberAccountIds: number[];
   onInvited: () => void;
 }) {
+  const { user } = useAuth();
   const [query, setQuery] = useState("");
-  const [found, setFound] = useState<PublicPetProfile | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [friends, setFriends] = useState<FriendEntry[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState("");
 
-  async function lookup() {
-    const handle = query.trim().replace(/^@/, "");
-    if (!handle) return;
-    setBusy(true);
-    setError("");
-    setSent("");
-    setFound(null);
-    try {
-      setFound(await petProfileApi.byHandle(handle));
-    } catch {
-      // Hồ sơ riêng tư và hồ sơ không tồn tại đều trả 404 — backend cố ý không
-      // phân biệt, nên thông báo ở đây cũng không được đoán hộ.
-      setError(`Không tìm thấy thú cưng có handle “${handle}”`);
-    } finally {
-      setBusy(false);
-    }
-  }
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
+    friendApi
+      .listOf(user.id)
+      .then((list) => setFriends(list?.others ?? []))
+      // Danh sách bạn bè là thông tin phụ trợ: lỗi ở đây không được chặn cả thẻ
+      // thành viên, nên chỉ coi như chưa có ai để mời.
+      .catch(() => setFriends([]))
+      .finally(() => setLoading(false));
+  }, [user]);
 
-  async function invite(petId: number, name: string) {
+  async function invite(accountId: number, name: string) {
+    setError("");
     try {
-      await groupApi.invite(groupId, petId);
-      setQuery("");
-      setFound(null);
+      await groupApi.invite(groupId, accountId);
       // Nói rõ lời mời còn phải chờ: người mời rất dễ tưởng đã thêm xong, rồi thắc
-      // mắc vì sao con vật đó không xuất hiện trong danh sách thành viên.
-      setSent(`Đã gửi lời mời tới ${name}. Bé sẽ vào nhóm khi chấp nhận.`);
+      // mắc vì sao người đó không xuất hiện trong danh sách thành viên.
+      setSent(`Đã gửi lời mời tới ${name}. Họ sẽ vào nhóm khi chấp nhận.`);
       onInvited();
     } catch (e) {
       setError(errorMessage(e));
     }
   }
 
-  const alreadyIn = found ? memberPetIds.includes(found.petId) : false;
+  const needle = query.trim().toLowerCase();
+  const shown = needle
+    ? friends.filter((f) => f.username.toLowerCase().includes(needle))
+    : friends;
 
   return (
     <div className="stack" style={{ marginTop: 14 }}>
-      <div className="row">
-        <input
-          className="input grow"
-          placeholder="Handle của thú cưng, ví dụ @milo"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && lookup()}
-        />
-        <Button onClick={lookup} disabled={busy || !query.trim()}>
-          {busy ? "Đang tìm…" : "Tìm"}
-        </Button>
-      </div>
+      <input
+        className="input"
+        placeholder="Lọc trong danh sách bạn bè…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
 
-      {found && (
-        <div className="row">
-          <Avatar
-            src={found.avatarUrl ?? undefined}
-            name={found.displayName}
-            size={32}
-          />
-          <div className="grow truncate">
-            <div style={{ fontWeight: 650 }}>{found.displayName}</div>
-            <div className="faint">@{found.handle}</div>
-          </div>
-          <Button
-            size="sm"
-            disabled={alreadyIn}
-            onClick={() => invite(found.petId, found.displayName)}
-          >
-            {alreadyIn ? "Đã ở trong nhóm" : "Gửi lời mời"}
-          </Button>
+      {loading ? (
+        <div className="faint">Đang tải danh sách bạn bè…</div>
+      ) : shown.length === 0 ? (
+        <div className="faint">
+          {friends.length === 0
+            ? "Chưa có bạn bè nào để mời."
+            : "Không có ai khớp từ khoá."}
         </div>
+      ) : (
+        shown.map((friend) => {
+          const alreadyIn = memberAccountIds.includes(friend.id);
+          return (
+            <div key={friend.id} className="row">
+              <Avatar
+                src={friend.imageUrl ?? undefined}
+                name={friend.username}
+                size={32}
+              />
+              <div className="grow truncate">
+                <div style={{ fontWeight: 650 }}>{friend.username}</div>
+              </div>
+              <Button
+                size="sm"
+                disabled={alreadyIn}
+                onClick={() => invite(friend.id, friend.username)}
+              >
+                {alreadyIn ? "Đã ở trong nhóm" : "Gửi lời mời"}
+              </Button>
+            </div>
+          );
+        })
       )}
+
       {sent && <Alert kind="ok">{sent}</Alert>}
       <Alert>{error}</Alert>
     </div>
   );
 }
 
-/**
- * Hộp thư yêu cầu vào nhóm — chỉ quản trị viên nhóm thấy.
- *
- * Danh sách này KHÔNG lẫn lời mời. Hai loại đều là hàng chờ, nhưng người có quyền
- * trả lời thì khác nhau: yêu cầu do quản trị viên duyệt, còn lời mời do chính bé
- * được mời trả lời. Backend tách chúng ở hai endpoint và giao diện tách theo.
- */
 function JoinRequestsCard({
   groupId,
   onChanged,
@@ -489,12 +474,12 @@ function JoinRequestsCard({
     load();
   }, [load]);
 
-  async function review(petId: number, approve: boolean) {
-    setBusy(petId);
+  async function review(accountId: number, approve: boolean) {
+    setBusy(accountId);
     setError("");
     try {
-      if (approve) await groupApi.approveJoinRequest(groupId, petId);
-      else await groupApi.rejectJoinRequest(groupId, petId);
+      if (approve) await groupApi.approveJoinRequest(groupId, accountId);
+      else await groupApi.rejectJoinRequest(groupId, accountId);
       await load();
       // Duyệt xong thì danh sách thành viên và số đếm đổi theo; từ chối thì không
       if (approve) onChanged();
@@ -517,37 +502,37 @@ function JoinRequestsCard({
       <Alert>{error}</Alert>
       <div className="stack">
         {requests.map((request) => (
-          <div key={request.petId} className="row">
+          <div key={request.accountId} className="row">
             <Avatar
-              src={request.pet?.avatarUrl || undefined}
-              name={request.pet?.displayName || request.pet?.name}
+              src={request.account?.avatarUrl || undefined}
+              name={request.account?.fullName || request.account?.username}
               size={38}
             />
-            <Link to={`/pets/${request.petId}`} className="grow truncate">
+            <Link to={`/profile/${request.accountId}`} className="grow truncate">
               <div style={{ fontWeight: 650 }}>
-                {request.pet?.displayName ||
-                  request.pet?.name ||
-                  `Thú cưng #${request.petId}`}
+                {request.account?.fullName ||
+                  request.account?.username ||
+                  `Người dùng #${request.accountId}`}
               </div>
               <div className="faint">
-                {request.pet?.handle ? `@${request.pet.handle}` : ""}
+                {request.account?.username ? `@${request.account.username}` : ""}
                 {request.requestedAt
-                  ? `${request.pet?.handle ? " · " : ""}${timeAgo(request.requestedAt)}`
+                  ? `${request.account?.username ? " · " : ""}${timeAgo(request.requestedAt)}`
                   : ""}
               </div>
             </Link>
             <Button
               size="sm"
-              disabled={busy === request.petId}
-              onClick={() => review(request.petId, true)}
+              disabled={busy === request.accountId}
+              onClick={() => review(request.accountId, true)}
             >
               Duyệt
             </Button>
             <Button
               size="sm"
               variant="ghost"
-              disabled={busy === request.petId}
-              onClick={() => review(request.petId, false)}
+              disabled={busy === request.accountId}
+              onClick={() => review(request.accountId, false)}
             >
               Từ chối
             </Button>
@@ -577,7 +562,6 @@ function MembershipControl({
   isOwner: boolean;
   onChanged: () => void;
 }) {
-  const { activePet } = useActivePet();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const status = group.viewerStatus ?? "NONE";
@@ -595,21 +579,6 @@ function MembershipControl({
     }
   }
 
-  // Mọi hành động ở đây đều cần `X-Pet-Id`. Nút bị chặn kèm lý do, thay vì để người
-  // dùng bấm rồi nhận một lỗi 400 mà họ không biết sửa ở đâu.
-  if (!activePet) {
-    return (
-      <Button
-        size="sm"
-        variant="outline"
-        disabled
-        title="Chọn một bé ở trang Thú cưng để tham gia nhóm"
-      >
-        Chọn bé để tham gia
-      </Button>
-    );
-  }
-
   if (status === "MEMBER") {
     if (isOwner) return <Badge tone="brand">Chủ nhóm</Badge>;
     return (
@@ -619,7 +588,7 @@ function MembershipControl({
           variant="outline"
           disabled={busy}
           onClick={() => {
-            if (!confirm(`Cho ${activePet.profile.displayName} rời nhóm này?`)) {
+            if (!confirm("Rời nhóm này?")) {
               return;
             }
             run(() => groupApi.leave(group.id));
@@ -702,8 +671,7 @@ function MembershipError({ message }: { message: string }) {
 export function GroupDetailPage() {
   const { id } = useParams();
   const groupId = Number(id);
-  const { can } = useAuth();
-  const { activePet, activePetId } = useActivePet();
+  const { can, user } = useAuth();
   const navigate = useNavigate();
   const [group, setGroup] = useState<Group | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -716,7 +684,7 @@ export function GroupDetailPage() {
     try {
       // Bảng tin của nhóm = lọc GET /v1/posts theo groupId
       const list = await postApi.feed({ groupId });
-      prefetchPetProfiles(list.map((post) => post.petId));
+      prefetchAccountProfiles(list.map((post) => post.accountId));
       setPosts(list);
     } catch {
       setPosts([]);
@@ -736,12 +704,9 @@ export function GroupDetailPage() {
     await loadPosts();
   }, [groupId, loadPosts]);
 
-  // Đổi bé đang thao tác thì phải nạp lại: `viewerStatus`, danh sách thành viên và
-  // cả danh sách bài đọc được đều tính theo `X-Pet-Id`, nên dữ liệu của bé trước
-  // không còn đúng cho bé sau.
   useEffect(() => {
     load();
-  }, [load, activePetId]);
+  }, [load]);
 
   if (loading) return <Spinner />;
   if (!group)
@@ -752,19 +717,11 @@ export function GroupDetailPage() {
     );
 
   /**
-   * `members` là bản ghi group_members, và chủ thể của nó nay là THÚ CƯNG.
-   *
-   * Vai trò xét theo con ĐANG THAO TÁC chứ không theo tài khoản: backend đặt
-   * khoá chính `(group_id, pet_id)` và `GroupService` đọc pet từ header, nên
-   * "chủ tôi có trong nhóm" không còn là câu trả lời hợp lệ. Hệ quả thấy được
-   * trên giao diện: đổi sang con khác thì các nút quản trị biến mất — đúng như
-   * request sẽ bị backend từ chối.
-   *
-   * Danh sách chỉ còn thành viên ACTIVE: bé đang chờ duyệt hoặc đang được mời không
-   * nằm ở đây, và với người ngoài một nhóm riêng tư thì nó rỗng hẳn.
+   * Danh sách chỉ còn thành viên ACTIVE: người đang chờ duyệt hoặc đang được mời
+   * không nằm ở đây, và với người ngoài một nhóm riêng tư thì nó rỗng hẳn.
    */
   const members = group.members ?? [];
-  const myRole = members.find((m) => m.petId === activePet?.petId)?.role;
+  const myRole = members.find((m) => m.accountId === user?.id)?.role;
   // Tư cách thành viên đọc từ `viewerStatus` của backend chứ không suy từ `members`:
   // nhóm riêng tư che danh sách, nên phép suy đó sai với chính thành viên của nhóm.
   const isMember = group.viewerStatus
@@ -790,9 +747,7 @@ export function GroupDetailPage() {
             <div className="faint">
               {/* totalMembers là số ACTIVE thật — đúng cả khi danh sách bị che */}
               {group.totalMembers ?? members.length} thành viên · {group.type}
-              {myRole && activePet
-                ? ` · ${activePet.profile.displayName} là ${myRole}`
-                : ""}
+              {myRole ? ` · bạn là ${myRole}` : ""}
             </div>
           </div>
           <div className="row" style={{ flexWrap: "wrap" }}>
@@ -864,11 +819,7 @@ export function GroupDetailPage() {
           ) : (
             <Card tight>
               <div className="faint">
-                {activePet
-                  ? `${activePet.profile.displayName} chưa là thành viên nhóm này nên chưa đăng bài được.`
-                  : "Bạn chưa chọn thú cưng nào."}{" "}
-                Tư cách thành viên gắn với từng bé, không với tài khoản — một bé
-                khác của bạn có thể đang ở trong nhóm.
+                Bạn chưa là thành viên nhóm này nên chưa đăng bài được.
               </div>
             </Card>
           )}
@@ -880,26 +831,26 @@ export function GroupDetailPage() {
               title="Thành viên"
               sub={
                 canManage
-                  ? "Bé đang chờ duyệt chưa nằm trong danh sách này"
+                  ? "Người đang chờ duyệt chưa nằm trong danh sách này"
                   : undefined
               }
             />
             <div className="stack">
               {members.map((member) => (
-                <div key={member.petId} className="row">
+                <div key={member.accountId} className="row">
                   <Avatar
-                    src={member.pet?.avatarUrl || undefined}
-                    name={member.pet?.displayName || member.pet?.name}
+                    src={member.account?.avatarUrl || undefined}
+                    name={member.account?.fullName || member.account?.username}
                     size={38}
                   />
-                  <Link to={`/pets/${member.petId}`} className="grow">
+                  <Link to={`/profile/${member.accountId}`} className="grow">
                     <div style={{ fontWeight: 650 }}>
-                      {member.pet?.displayName ||
-                        member.pet?.name ||
-                        `Thú cưng #${member.petId}`}
+                      {member.account?.fullName ||
+                        member.account?.username ||
+                        `Người dùng #${member.accountId}`}
                     </div>
-                    {member.pet?.handle && (
-                      <div className="faint">@{member.pet.handle}</div>
+                    {member.account?.username && (
+                      <div className="faint">@{member.account.username}</div>
                     )}
                   </Link>
                   <Badge
@@ -919,7 +870,7 @@ export function GroupDetailPage() {
                       variant="ghost"
                       onClick={async () => {
                         try {
-                          await groupApi.removeMember(groupId, member.petId);
+                          await groupApi.removeMember(groupId, member.accountId);
                           load();
                         } catch (e) {
                           setError(errorMessage(e));
@@ -938,7 +889,7 @@ export function GroupDetailPage() {
             {isMember && (
               <InviteBox
                 groupId={groupId}
-                memberPetIds={members.map((m) => m.petId)}
+                memberAccountIds={members.map((m) => m.accountId)}
                 onInvited={load}
               />
             )}

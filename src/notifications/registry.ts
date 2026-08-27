@@ -11,8 +11,8 @@ import type { Notification, NotificationObjectType } from "../types";
  *
  * Hợp đồng phía backend: notification/entity/NotificationObjectType.java.
  *
- * `objectId` của cả bốn loại `GROUP_*` là id NHÓM, không phải id thú cưng liên
- * quan — thú cưng nào gây ra thông báo thì đọc từ `actorId`.
+ * `objectId` của cả bốn loại `GROUP_*` là id NHÓM, không phải id người liên
+ * quan — ai gây ra thông báo thì đọc từ `actorId`.
  */
 export interface NotificationKind {
   glyph: string;

@@ -4,7 +4,7 @@ import type { RoleName } from "../types";
  * Payload access token do backend ký (lopet-be/src/utils/jwt.util.ts):
  *   { id, email, roles, iat, exp }
  *
- * Phải đọc từ đây vì LoginOutputDTO chỉ trả về { id, accessToken, refreshToken }
+ * Phải đọc từ đây vì response đăng nhập chỉ trả về { id, accessToken }
  * — không có roles. Nếu không giải mã token thì `can()` luôn chỉ thấy baseline
  * và toàn bộ giao diện quản trị sẽ không bao giờ hiện ra với ADMIN.
  *
