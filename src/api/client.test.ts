@@ -28,7 +28,6 @@ function makeToken(secondsFromNow: number, id = 1) {
     JSON.stringify({
       id,
       email: "u@lopet.local",
-      roles: [],
       exp: Math.floor(Date.now() / 1000) + secondsFromNow,
     }),
   )
@@ -204,23 +203,20 @@ describe("gia hạn phiên", () => {
   });
 
   /**
-   * Route mang @Auth(required=true) KHÔNG chuẩn hoá lỗi token về 401: message thô
-   * của jsonwebtoken lọt ra ngoài kèm mã 500. Chỉ bắt 401 là bỏ sót đúng trường
-   * hợp phổ biến nhất — access token hết hạn giữa phiên.
+   * Backend chỉ trả 401 cho lỗi token, kể cả token hết hạn giữa phiên. Mọi mã
+   * khác — 500 kể cả khi message trông giống lỗi JWT — là lỗi thật của server
+   * và KHÔNG được kéo theo một vòng gia hạn.
    */
-  it("500 kèm message 'jwt expired' cũng được coi là token hỏng", async () => {
+  it("500 kèm message giống lỗi JWT vẫn KHÔNG gia hạn", async () => {
     localStorage.setItem(TOKEN_KEY, VALID_TOKEN);
-    stubRefresh("access-moi");
+    const refreshCalls = stubRefresh("access-moi");
 
-    let calls = 0;
     stubAdapter(async (config) => {
-      calls += 1;
-      if (calls === 1) throw httpError(config, 500, "jwt expired");
-      return ok(config);
+      throw httpError(config, 500, "jwt expired");
     });
 
-    await expect(api.get("/posts")).resolves.toBeTruthy();
-    expect(calls).toBe(2);
+    await expect(api.get("/posts")).rejects.toThrow();
+    expect(refreshCalls).toHaveLength(0);
   });
 
   it("500 vì lỗi server thật thì KHÔNG gia hạn", async () => {

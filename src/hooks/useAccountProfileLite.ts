@@ -9,10 +9,9 @@ import type { PublicProfile } from "../types";
  * Cache ở cấp module: một bảng tin có hàng chục bài của cùng vài người, tra lại
  * mỗi lần là thừa. `pending` gom các lời gọi trùng id đang bay về một request.
  *
- * Hồ sơ PRIVATE, và hồ sơ FRIEND của người không phải bạn, trả 404 — đó là kết
- * quả HỢP LỆ, không phải lỗi. Cache luôn giá trị `null` cho những id đó để không
- * hỏi lại ở mỗi lần render: nội dung công khai của một người vẫn hiện được, chỉ
- * là hiện dưới dạng rút gọn.
+ * Tài khoản không tồn tại trả 404 — cache luôn giá trị `null` cho những id đó
+ * để không hỏi lại ở mỗi lần render: bài viết của một tác giả đã bị xoá vẫn hiện
+ * được, chỉ là hiện dưới dạng rút gọn.
  */
 const cache = new Map<number, PublicProfile | null>();
 const pending = new Map<number, Promise<PublicProfile | null>>();
@@ -76,9 +75,6 @@ export function prefetchAccountProfiles(ids: (number | null | undefined)[]) {
 /**
  * Xoá cache sau khi người dùng tự sửa hồ sơ của mình — nếu không, tên và ảnh cũ
  * còn dính lại trên mọi bài đã render cho tới khi tải lại trang.
- *
- * Cũng phải gọi khi đổi `visibility`: hạ hồ sơ xuống PRIVATE mà không dọn cache
- * thì bản công khai cũ vẫn hiện với chính người vừa ẩn nó đi.
  */
 export function invalidateAccountProfile(accountId: number) {
   cache.delete(accountId);

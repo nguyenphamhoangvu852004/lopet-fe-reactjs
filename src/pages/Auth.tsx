@@ -28,8 +28,7 @@ function AuthLayout({
         </div>
         <h1>Hiện thực hoá đời sống thú cưng</h1>
         <p style={{ opacity: 0.9, maxWidth: 420 }}>
-          Chia sẻ khoảnh khắc, lập nhóm cộng đồng, kết nối với những người nuôi
-          thú cưng quanh bạn.
+          Chia sẻ khoảnh khắc và theo dõi những người nuôi thú cưng quanh bạn.
         </p>
       </div>
       <div className="auth-form-wrap">

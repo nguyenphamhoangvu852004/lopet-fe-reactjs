@@ -7,17 +7,6 @@ import { decodeToken, isExpired } from "../authz/token";
 export const BASE_URL =
   import.meta.env.VITE_BACKEND_API ?? "http://localhost:8080";
 
-/**
- * Realtime là STOMP over WebSocket trên CHÍNH cổng REST (backend endpoint
- * `/ws`), nên URL suy ra thẳng từ BASE_URL: http → ws, https → wss. Bản trước
- * dùng netty-socketio ở cổng riêng 8081 và cần một biến môi trường thứ hai —
- * biến đó đã bỏ, chỉ còn VITE_WS_URL làm đường ghi đè khi proxy đặt `/ws` ở
- * host khác.
- */
-export const WS_URL =
-  import.meta.env.VITE_WS_URL ??
-  `${BASE_URL.replace(/\/+$/, "").replace(/^http/, "ws")}/ws`;
-
 export const TOKEN_KEY = "accessToken";
 export const USER_KEY = "user";
 
@@ -56,9 +45,8 @@ export const api = axios.create({
 api.interceptors.request.use(async (config) => {
   /**
    * Gia hạn TRƯỚC khi gửi khi biết chắc access token đã hết hạn, thay vì chờ
-   * server từ chối: trên route mang @Auth(required=true) backend trả 500 kèm
-   * message thô "jwt expired" (xem isSessionError bên dưới), nên để request bay
-   * đi là đổi lấy một lỗi 500 nằm trong log và một vòng đi-về vô ích.
+   * server từ chối: để request bay đi là đổi lấy một 401 chắc chắn xảy ra và
+   * một vòng đi-về vô ích.
    */
   await ensureFreshSession();
 
@@ -75,13 +63,6 @@ api.interceptors.request.use(async (config) => {
 
 /** Sự kiện phát ra khi phiên hết hạn để AuthContext dọn state, tránh reload cứng */
 export const SESSION_EXPIRED = "lopet:session-expired";
-
-/**
- * Phát mỗi khi cặp token được thay mới. Cần vì access token còn được dùng NGOÀI
- * axios: WebSocket gửi nó một lần duy nhất trong frame CONNECT, nên nơi giữ kết
- * nối phải biết mà cập nhật, nếu không lần kết nối lại nào cũng cầm token đã chết.
- */
-export const SESSION_REFRESHED = "lopet:session-refreshed";
 
 /**
  * Client RIÊNG cho lời gọi gia hạn, cố ý không mang interceptor nào: nếu dùng
@@ -152,8 +133,9 @@ export function refreshSession(): Promise<string> {
       if (!data?.accessToken) {
         throw new Error("Phản hồi gia hạn thiếu access token");
       }
+      // Không phát sự kiện "đã gia hạn" nữa: người nghe duy nhất là kênh
+      // WebSocket, thứ cần token ở frame CONNECT — kênh đó đã bị gỡ cùng backend.
       localStorage.setItem(TOKEN_KEY, data.accessToken);
-      window.dispatchEvent(new CustomEvent(SESSION_REFRESHED));
       return data.accessToken;
     })
     .finally(() => {
@@ -194,25 +176,16 @@ export async function ensureFreshSession(): Promise<void> {
 }
 
 /**
- * Ba message thô của jsonwebtoken. Backend Spring giữ nguyên hành vi của bản
- * TypeScript: trên route dùng verifyToken() lỗi token KHÔNG được chuẩn hoá về
- * 401 mà lọt ra ngoài thành 500 + message thô (RawJwtException). Chỉ bắt 401 là
- * bỏ sót đúng trường hợp phổ biến nhất — access token hết hạn giữa phiên.
+ * Lỗi có thể chữa được bằng một access token mới.
+ *
+ * Chỉ còn 401. Backend đã rút gọn JWT về luồng đơn giản nhất: thiếu token,
+ * token hỏng và token hết hạn đều trả đúng 401 ở endpoint mang @Auth. Bản
+ * trước phải bắt thêm 500 kèm message thô của jsonwebtoken và 400
+ * "Token not found" — hai nhánh đó nay là code chết, giữ lại chỉ khiến một lỗi
+ * 500 thật của server bị hiểu nhầm thành phiên hỏng.
  */
-const JWT_ERRORS = ["jwt expired", "invalid signature", "jwt malformed"];
-
-/** Lỗi có thể chữa được bằng một access token mới */
 function isSessionError(error: AxiosError<{ message?: string }>): boolean {
-  const status = error.response?.status;
-  const message = error.response?.data?.message ?? "";
-
-  // optionalAuth() chuẩn hoá về 401
-  if (status === 401) return true;
-  // verifyToken() để lỗi thô lọt ra 500
-  if (status === 500) return JWT_ERRORS.includes(message);
-  // Không gửi header Authorization: gia hạn xong là gửi được
-  if (status === 400) return message === "Token not found";
-  return false;
+  return error.response?.status === 401;
 }
 
 /** Đánh dấu request đã thử lại một lần, tránh lặp vô hạn khi token mới cũng bị từ chối */
