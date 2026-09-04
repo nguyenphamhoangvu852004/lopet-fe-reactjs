@@ -2,17 +2,9 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
 import { Card, EmptyState, Spinner } from "./components/ui";
 import { useAuth } from "./context/AuthContext";
-import {
-  AdminAccountsPage,
-  AdminAdvertisersPage,
-  AdminReportsPage,
-} from "./pages/Admin";
-import { AdvertiserPage } from "./pages/Advertiser";
+import { AccountsPage } from "./pages/Accounts";
 import { ForgotPasswordPage, LoginPage, RegisterPage } from "./pages/Auth";
 import { FeedPage, SuggestionRail } from "./pages/Feed";
-import { FriendsPage, NotificationsPage } from "./pages/Friends";
-import { GroupDetailPage, GroupsPage } from "./pages/Groups";
-import { MessagesPage } from "./pages/Messages";
 import { PostDetailPage } from "./pages/PostDetail";
 import { ProfilePage } from "./pages/Profile";
 import { SearchPage } from "./pages/Search";
@@ -28,30 +20,11 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Ẩn trang khi thiếu quyền. Đây chỉ là lớp UX — backend mới là nơi thực thi;
- * gõ thẳng URL vẫn sẽ nhận 403 từ API.
+ * Không còn <RequirePermission>: backend đã gỡ toàn bộ phân quyền, mọi tài khoản
+ * đã đăng nhập đều gọi được cùng một tập endpoint. Ranh giới duy nhất còn lại là
+ * quyền sở hữu, và nó được kiểm ngay tại chỗ hành động (chỉ tác giả mới thấy nút
+ * sửa/xoá bài của mình) chứ không phải ở tầng route.
  */
-function RequirePermission({
-  permission,
-  children,
-}: {
-  permission: string;
-  children: React.ReactNode;
-}) {
-  const { can } = useAuth();
-  if (!can(permission))
-    return (
-      <Card>
-        <EmptyState
-          icon="🔒"
-          title="Bạn không có quyền truy cập trang này"
-          hint={`Cần quyền: ${permission}`}
-        />
-      </Card>
-    );
-  return <>{children}</>;
-}
-
 function Shell({
   children,
   rail,
@@ -115,59 +88,10 @@ export default function App() {
         }
       />
       <Route
-        path="/friends"
+        path="/accounts"
         element={
           <Shell>
-            <FriendsPage />
-          </Shell>
-        }
-      />
-      <Route
-        path="/groups"
-        element={
-          <Shell>
-            <GroupsPage />
-          </Shell>
-        }
-      />
-      <Route
-        path="/groups/:id"
-        element={
-          <Shell>
-            <GroupDetailPage />
-          </Shell>
-        }
-      />
-      <Route
-        path="/messages"
-        element={
-          <Shell>
-            <MessagesPage />
-          </Shell>
-        }
-      />
-      {/* Mở thẳng một đoạn chat, để nút "Nhắn tin" ở trang cá nhân dẫn đúng người */}
-      <Route
-        path="/messages/:peerId"
-        element={
-          <Shell>
-            <MessagesPage />
-          </Shell>
-        }
-      />
-      <Route
-        path="/notifications"
-        element={
-          <Shell>
-            <NotificationsPage />
-          </Shell>
-        }
-      />
-      <Route
-        path="/advertiser"
-        element={
-          <Shell>
-            <AdvertiserPage />
+            <AccountsPage />
           </Shell>
         }
       />
@@ -176,37 +100,6 @@ export default function App() {
         element={
           <Shell>
             <SettingsPage />
-          </Shell>
-        }
-      />
-
-      <Route
-        path="/admin/accounts"
-        element={
-          <Shell>
-            <RequirePermission permission="account:read">
-              <AdminAccountsPage />
-            </RequirePermission>
-          </Shell>
-        }
-      />
-      <Route
-        path="/admin/reports"
-        element={
-          <Shell>
-            <RequirePermission permission="report:read">
-              <AdminReportsPage />
-            </RequirePermission>
-          </Shell>
-        }
-      />
-      <Route
-        path="/admin/advertisers"
-        element={
-          <Shell>
-            <RequirePermission permission="advertiser:read">
-              <AdminAdvertisersPage />
-            </RequirePermission>
           </Shell>
         }
       />

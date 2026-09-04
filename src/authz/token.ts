@@ -1,12 +1,10 @@
-import type { RoleName } from "../types";
-
 /**
- * Payload access token do backend ký (lopet-be/src/utils/jwt.util.ts):
- *   { id, email, roles, iat, exp }
+ * Payload access token do backend ký (security/jwt/JwtService.java):
+ *   { id, email, iat, exp }
  *
- * Phải đọc từ đây vì response đăng nhập chỉ trả về { id, accessToken }
- * — không có roles. Nếu không giải mã token thì `can()` luôn chỉ thấy baseline
- * và toàn bộ giao diện quản trị sẽ không bao giờ hiện ra với ADMIN.
+ * Phải đọc từ đây vì response đăng nhập chỉ trả về { id, accessToken }.
+ *
+ * Không còn `roles`: backend đã gỡ toàn bộ phân quyền, token chỉ còn danh tính.
  *
  * Đây thuần tuý là đọc dữ liệu để dựng UI, KHÔNG phải xác thực chữ ký: chữ ký
  * chỉ backend mới kiểm được, và mọi endpoint đều tự kiểm lại.
@@ -14,7 +12,6 @@ import type { RoleName } from "../types";
 export interface TokenPayload {
   id: number;
   email?: string;
-  roles: RoleName[];
   exp?: number;
 }
 
@@ -38,16 +35,10 @@ export function decodeToken(token?: string | null): TokenPayload | null {
     const raw = JSON.parse(base64UrlDecode(parts[1])) as {
       id?: number;
       email?: string;
-      roles?: unknown;
       exp?: number;
     };
     if (typeof raw.id !== "number") return null;
-    return {
-      id: raw.id,
-      email: raw.email,
-      roles: Array.isArray(raw.roles) ? (raw.roles as RoleName[]) : [],
-      exp: raw.exp,
-    };
+    return { id: raw.id, email: raw.email, exp: raw.exp };
   } catch {
     return null;
   }

@@ -4,9 +4,8 @@ import { errorMessage } from "../../api/client";
 import { postApi } from "../../api/endpoints";
 import { useAuth } from "../../context/AuthContext";
 import { useAccountProfileLite } from "../../hooks/useAccountProfileLite";
-import type { Post, PostScope } from "../../types";
-import { ReportDialog } from "../report/ReportDialog";
-import { Alert, Avatar, Badge, Button, Card, Modal, timeAgo } from "../ui";
+import type { Post } from "../../types";
+import { Alert, Avatar, Button, Card, Modal, timeAgo } from "../ui";
 import { CommentSection } from "./CommentSection";
 
 function EditPostModal({
@@ -21,7 +20,6 @@ function EditPostModal({
   onSaved: () => void;
 }) {
   const [content, setContent] = useState(post.content ?? "");
-  const [scope, setScope] = useState<PostScope>(post.postScope ?? "PUBLIC");
   // Media cũ nào còn được tick sẽ đi trong oldIdsMedia; phần bỏ tick bị backend xoá
   const [keptMedia, setKeptMedia] = useState<number[]>(
     () =>
@@ -31,19 +29,12 @@ function EditPostModal({
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const inGroup = Boolean(post.groupId);
-  const scopes: PostScope[] = inGroup
-    ? ["PUBLIC", "PRIVATE"]
-    : ["PUBLIC", "FRIEND", "PRIVATE"];
-
   async function save() {
     setBusy(true);
     setError("");
     try {
       const form = new FormData();
       form.append("content", content);
-      form.append("scope", scope);
-      if (post.groupId) form.append("groupId", String(post.groupId));
       /**
        * Field `oldIdsMedia` LUÔN phải có mặt, kể cả khi không giữ lại cái nào.
        *
@@ -89,24 +80,6 @@ function EditPostModal({
           value={content}
           onChange={(e) => setContent(e.target.value)}
         />
-      </div>
-
-      <div className="field">
-        <label>Ai xem được</label>
-        <select
-          className="select"
-          value={scope}
-          onChange={(e) => setScope(e.target.value as PostScope)}
-        >
-          {scopes.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-        {inGroup && (
-          <div className="faint">Bài trong nhóm không dùng phạm vi “Bạn bè”.</div>
-        )}
       </div>
 
       {post.postMedias && post.postMedias.length > 0 && (
@@ -186,7 +159,7 @@ export function PostCard({
   /** `full` dùng ở trang chi tiết: bình luận phân trang thay vì chỉ 3 dòng */
   variant?: "preview" | "full";
 }) {
-  const { can, user } = useAuth();
+  const { user } = useAuth();
   const author = useAccountProfileLite(post.accountId);
 
   /** likeList chứa những tài khoản đã thích — backend không trả cờ isLiked riêng */
@@ -202,15 +175,16 @@ export function PostCard({
    */
   const [commentCount, setCommentCount] = useState<number | null>(null);
   const [error, setError] = useState("");
-  const [reporting, setReporting] = useState(false);
   const [editing, setEditing] = useState(false);
   const commentInputRef = useRef<HTMLInputElement>(null);
 
+  /**
+   * Chỉ tác giả sửa/xoá được bài của mình.
+   *
+   * Không còn ngoại lệ nào cho quản trị viên: backend đã gỡ phân quyền, và
+   * PostService kiểm đúng một điều kiện — người gọi có phải chủ bài không.
+   */
   const isMine = Boolean(post.accountId && post.accountId === user?.id);
-  // Chủ bài xoá được bài mình; staff có post:delete xoá được của bất kỳ ai.
-  const canDelete = (isMine && can("post:delete:own")) || can("post:delete");
-  // Sửa bài thì KHÔNG có ngoại lệ cho staff — backend đặt bypassRoles rỗng.
-  const canEdit = isMine && can("post:update:own");
 
   async function toggleLike() {
     const next = !liked;
@@ -218,8 +192,6 @@ export function PostCard({
     setLikes((n) => Math.max(0, n + (next ? 1 : -1)));
     try {
       if (next) {
-        // Backend tự báo cho chủ bài trong PostService.like, và tự bỏ qua khi
-        // người thích chính là chủ bài
         await postApi.like(post.postId);
       } else {
         await postApi.unlike(post.postId);
@@ -263,33 +235,21 @@ export function PostCard({
           <div className="faint">
             {author?.username ? `@${author.username} · ` : ""}
             {timeAgo(post.createdAt)}
-            {post.groupId ? " · trong nhóm" : ""}
-            {post.postScope ? ` · ${post.postScope}` : ""}
           </div>
         </div>
-        {post.groupId && (
-          <Link to={`/groups/${post.groupId}`}>
-            <Badge tone="brand">Nhóm #{post.groupId}</Badge>
-          </Link>
-        )}
-        {canEdit && (
-          <Button variant="icon" onClick={() => setEditing(true)} title="Sửa bài">
-            ✏️
-          </Button>
-        )}
-        {canDelete && (
-          <Button variant="icon" onClick={remove} title="Xoá bài">
-            🗑️
-          </Button>
-        )}
-        {!isMine && (
-          <Button
-            variant="icon"
-            onClick={() => setReporting(true)}
-            title="Báo cáo"
-          >
-            🚩
-          </Button>
+        {isMine && (
+          <>
+            <Button
+              variant="icon"
+              onClick={() => setEditing(true)}
+              title="Sửa bài"
+            >
+              ✏️
+            </Button>
+            <Button variant="icon" onClick={remove} title="Xoá bài">
+              🗑️
+            </Button>
+          </>
         )}
       </div>
 
@@ -353,15 +313,9 @@ export function PostCard({
       <CommentSection
         postId={post.postId}
         variant={variant}
+        postAuthorId={post.accountId}
         onCountChange={setCommentCount}
         inputRef={commentInputRef}
-      />
-
-      <ReportDialog
-        open={reporting}
-        type="POST"
-        targetId={post.postId}
-        onClose={() => setReporting(false)}
       />
 
       {editing && (

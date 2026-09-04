@@ -228,15 +228,6 @@ select {
   color: #fff;
 }
 
-.nav-section {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-faint);
-  font-weight: 700;
-  padding: 14px 12px 6px;
-}
-
 /* ───────────────────────── card ───────────────────────── */
 
 .card {
@@ -675,22 +666,6 @@ select {
 
 /* ─────────────── bổ sung cho phần tích hợp API ─────────────── */
 
-/** Huy hiệu đếm ở thanh điều hướng và danh sách hội thoại */
-.pill {
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--accent, #ef4444);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-}
-
 /** Nút dạng chữ (trả lời bình luận, huỷ trả lời) */
 .link-btn {
   border: 0;
@@ -724,200 +699,9 @@ a.post-action {
 
 /* ─────────────────── trang tin nhắn (messenger) ─────────────────── */
 
-/**
- * Bố cục hai khung chiếm trọn chiều cao còn lại, thay cho khung chat cũ bị bó
- * trong một thẻ card cao 52vh.
- */
-.messenger {
-  display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  /* .layout co padding doc 22px + 60px, tru du de khung chat khong vuot man
-     hinh (neu khong ca trang se co thanh cuon va tin cuoi bi khuat) */
-  height: calc(100dvh - var(--topbar-h) - 82px);
-  min-height: 460px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.conv-pane {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  /* min-height:0 de .conv-list co the cuon trong khung thay vi lam tran khung */
-  min-height: 0;
-  border-right: 1px solid var(--border);
-}
-
-.conv-head {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border-bottom: 1px solid var(--border);
-}
-
-.conv-head .card-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.conv-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 8px;
-}
-
-.conv-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-}
-
-.conv-item:hover {
-  background: var(--surface-2);
-}
-
-.conv-item.active {
-  background: var(--surface-2);
-  box-shadow: inset 3px 0 0 var(--brand);
-}
-
-.conv-name {
-  font-weight: 650;
-  font-size: 14px;
-}
-
-.conv-preview {
-  font-size: 12.5px;
-  color: var(--text-faint);
-}
-
-/* Đoạn chat chưa đọc: đậm lên như mọi ứng dụng nhắn tin */
-.conv-item.unread .conv-name,
-.conv-item.unread .conv-preview {
-  color: var(--text);
-  font-weight: 700;
-}
-
-.conv-meta {
-  display: grid;
-  justify-items: end;
-  gap: 5px;
-  font-size: 11px;
-  flex: 0 0 auto;
-}
-
-.conv-meta .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--brand);
-}
-
-.chat-pane {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  /* Thieu dong nay thi .chat-scroll gian het co va o soan tin bi day ra ngoai */
-  min-height: 0;
-}
-
-.chat-empty {
-  flex: 1;
-  display: grid;
-  place-items: center;
-}
-
-.chat-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.chat-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 16px;
-  align-content: start;
-}
-
-/* Vạch ngăn ngày giữa các cụm tin */
-.day-divider {
-  display: flex;
-  justify-content: center;
-  margin: 14px 0 10px;
-}
-
-.day-divider span {
-  font-size: 11.5px;
-  color: var(--text-faint);
-  background: var(--surface-2);
-  padding: 3px 12px;
-  border-radius: 999px;
-}
-
-/* Một cụm = nhiều tin liên tiếp của cùng người trong vòng 5 phút */
-.msg-group {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.msg-group.mine {
-  justify-content: flex-end;
-}
-
-.msg-stack {
-  display: grid;
-  gap: 2px;
-  max-width: min(70%, 520px);
-}
-
-.msg-group.mine .msg-stack {
-  justify-items: end;
-}
-
-.msg-stack .bubble {
-  max-width: 100%;
-}
-
 /* Tin đang bay lên server */
 .bubble.pending {
   opacity: 0.6;
-}
-
-.bubble-text {
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.bubble-image {
-  display: block;
-  max-width: 240px;
-  border-radius: 12px;
-  margin-top: 4px;
-}
-
-.bubble-meta {
-  font-size: 10.5px;
-  opacity: 0.72;
-  margin-top: 3px;
 }
 
 .composer {
@@ -927,41 +711,6 @@ a.post-action {
   padding: 12px 16px;
   border-top: 1px solid var(--border);
 }
-
-.composer-input {
-  flex: 1;
-  resize: none;
-  max-height: 120px;
-  overflow-y: auto;
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  background: var(--surface-2);
-  color: inherit;
-  font: inherit;
-  line-height: 1.4;
-}
-
-.composer-input:focus {
-  outline: none;
-  border-color: var(--brand);
-}
-
-.composer-attachment {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
-  border-top: 1px solid var(--border);
-}
-
-.composer-attachment img {
-  width: 40px;
-  height: 40px;
-  object-fit: cover;
-  border-radius: 8px;
-}
-
 
 /* ═══════════════════════════ RESPONSIVE ═══════════════════════════
  *
@@ -1070,20 +819,6 @@ video {
     display: none;
   }
 
-  .nav-item .pill {
-    position: absolute;
-    top: 2px;
-    right: 6px;
-    min-width: 16px;
-    height: 16px;
-    font-size: 10px;
-    padding: 0 4px;
-  }
-
-  .nav-section {
-    display: none;
-  }
-
   /* Thanh trên cùng gọn lại nhường chỗ cho ô tìm kiếm */
   .topbar {
     gap: 10px;
@@ -1129,36 +864,6 @@ video {
   .table-wrap {
     margin: 0 -14px;
     padding: 0 14px;
-  }
-}
-
-/* Desktop hiện cả hai khung nên không cần nút quay lại. Khai báo TRƯỚC media
- * query bên dưới: cùng specificity thì khai báo sau thắng, đặt sai chỗ là nút
- * bị ẩn vĩnh viễn kể cả trên mobile. */
-.chat-back {
-  display: none;
-}
-
-/* ---------- ≤ 760px: trang tin nhắn còn một khung ---------- */
-
-@media (max-width: 760px) {
-  .messenger {
-    grid-template-columns: minmax(0, 1fr);
-    height: calc(100dvh - var(--topbar-h) - 98px - env(safe-area-inset-bottom));
-    border-radius: var(--radius);
-  }
-  .messenger.has-active .conv-pane {
-    display: none;
-  }
-  .messenger:not(.has-active) .chat-pane {
-    display: none;
-  }
-  /* Nút quay lại danh sách chỉ có nghĩa khi hai khung không cùng hiển thị */
-  .chat-back {
-    display: inline-flex;
-  }
-  .msg-stack {
-    max-width: 82%;
   }
 }
 
@@ -1237,13 +942,6 @@ video {
     padding: 24px 12px;
   }
 
-  .msg-stack {
-    max-width: 86%;
-  }
-  .chat-scroll,
-  .composer {
-    padding: 12px;
-  }
 }
 
 /* ───────────────── khối đầu trang cá nhân ───────────────── */
@@ -1505,192 +1203,3 @@ video {
 
 /* ─────────────────── chuông thông báo trên header ─────────────────── */
 
-/* Mỏ neo của panel. z-index cao hơn .topbar (40) để panel không bị chính thanh
-   header cắt mất khi trang phía dưới cuộn qua. */
-.bell {
-  position: relative;
-  z-index: 60;
-}
-
-/* Huy hiệu đếm nằm đè lên góc chuông. .btn-icon là inline-flex nên phải tự đặt
-   position: relative ở đây, không mượn được từ .bell (khác phần tử). */
-.bell .btn-icon {
-  position: relative;
-  overflow: visible;
-}
-
-.bell-badge {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: var(--accent, #ef4444);
-  color: #fff;
-  font-size: 10.5px;
-  font-weight: 700;
-  line-height: 18px;
-  text-align: center;
-  /* Viền cùng màu nền header để huy hiệu tách khỏi glyph bên dưới */
-  box-shadow: 0 0 0 2px var(--surface);
-}
-
-.bell-panel {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  width: 380px;
-  max-width: calc(100vw - 24px);
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-}
-
-.bell-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-}
-
-/* Danh sách tự cuộn, phần đầu và chân panel đứng yên. Trần tính theo dvh để
-   thanh địa chỉ của trình duyệt mobile co lại không làm panel tràn màn hình. */
-.bell-list {
-  max-height: min(60dvh, 420px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.bell-empty {
-  padding: 22px 14px;
-  text-align: center;
-}
-
-.bell-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 11px 14px;
-  border-bottom: 1px solid var(--border);
-}
-
-.bell-item:last-child {
-  border-bottom: none;
-}
-
-.bell-item.read {
-  opacity: 0.6;
-}
-
-.bell-glyph {
-  font-size: 17px;
-  line-height: 1.3;
-  flex: 0 0 auto;
-}
-
-/* Thông báo dài phải xuống dòng thay vì kéo giãn panel */
-.bell-text {
-  font-size: 13.5px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-/* Chấm "chưa đọc" kiêm luôn nút đánh dấu đã đọc — vùng bấm 24px cho vừa đầu
-   ngón tay, còn chấm màu thì vẽ bằng ::after cho nhỏ gọn về thị giác. */
-.bell-dot {
-  flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  border: none;
-  background: none;
-  cursor: pointer;
-  padding: 0;
-}
-
-.bell-dot::after {
-  content: "";
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--brand);
-}
-
-.bell-more {
-  padding: 11px 14px;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--brand-strong);
-  border-top: 1px solid var(--border);
-}
-
-/* Màn hình hẹp: neo phải sẽ đẩy panel tràn ra ngoài viewport, nên chuyển sang
-   trải ngang gần hết bề rộng. position: fixed chứ không absolute — tính theo
-   viewport thì không phụ thuộc chuông đang nằm ở đâu trên thanh header. */
-@media (max-width: 560px) {
-  .bell-panel {
-    position: fixed;
-    top: calc(var(--topbar-h) + 6px);
-    left: 10px;
-    right: 10px;
-    width: auto;
-    max-width: none;
-  }
-
-  .bell-list {
-    max-height: min(66dvh, 460px);
-  }
-}
-
-/* Cả dòng thông báo là một vùng bấm. Nút trần: không viền, không nền, thừa
-   hưởng màu chữ — trông như văn bản nhưng vẫn là control thật (focus được bằng
-   bàn phím, có trạng thái :disabled). */
-.bell-open {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-/* Loại thông báo cũ không có đích để mở — bỏ con trỏ bàn tay để khỏi hứa hẹn
-   một hành động không tồn tại. Vẫn bấm được, chỉ để đánh dấu đã đọc. */
-.bell-open.flat {
-  cursor: default;
-}
-
-.bell-open:hover .bell-text {
-  text-decoration: underline;
-}
-
-.bell-open.flat:hover .bell-text {
-  text-decoration: none;
-}
-
-/* .bell-text là <span> nên phải tự xuống khối, nếu không thời gian bên dưới sẽ
-   trôi lên nằm cùng dòng với nội dung. */
-.bell-text,
-.bell-time {
-  display: block;
-}
-
-.bell-time {
-  margin-top: 2px;
-}

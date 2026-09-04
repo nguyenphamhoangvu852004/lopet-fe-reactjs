@@ -19,29 +19,34 @@ afterEach(() => {
 });
 
 describe("decodeToken", () => {
-  it("đọc được id, email và roles", () => {
+  it("đọc được id, email và exp", () => {
     const token = makeToken({
       id: 7,
       email: "admin@lopet.vn",
-      roles: ["ADMIN"],
       exp: 1893456000,
     });
     expect(decodeToken(token)).toEqual({
       id: 7,
       email: "admin@lopet.vn",
-      roles: ["ADMIN"],
       exp: 1893456000,
     });
   });
 
   it("giữ nguyên tiếng Việt có dấu trong payload", () => {
-    const token = makeToken({ id: 1, email: "Nguyễn Văn Đức", roles: [] });
+    const token = makeToken({ id: 1, email: "Nguyễn Văn Đức" });
     expect(decodeToken(token)?.email).toBe("Nguyễn Văn Đức");
   });
 
-  it("roles thiếu hoặc sai kiểu thì thành mảng rỗng", () => {
-    expect(decodeToken(makeToken({ id: 1 }))?.roles).toEqual([]);
-    expect(decodeToken(makeToken({ id: 1, roles: "ADMIN" }))?.roles).toEqual([]);
+  /**
+   * Token do backend cũ ký vẫn còn claim `roles`. Nó không được đọc nữa, và
+   * quan trọng hơn: không được lọt vào payload để rồi có chỗ nào đó tin vào nó.
+   */
+  it("bỏ qua claim roles còn sót của token cũ", () => {
+    expect(decodeToken(makeToken({ id: 1, roles: ["ADMIN"] }))).toEqual({
+      id: 1,
+      email: undefined,
+      exp: undefined,
+    });
   });
 
   it("trả null với token rỗng, sai định dạng hoặc thiếu id", () => {
@@ -56,7 +61,7 @@ describe("decodeToken", () => {
 describe("isExpired", () => {
   it("null hoặc không có exp thì coi như chưa hết hạn", () => {
     expect(isExpired(null)).toBe(false);
-    expect(isExpired({ id: 1, roles: [] })).toBe(false);
+    expect(isExpired({ id: 1 })).toBe(false);
   });
 
   it("so exp (giây) với thời điểm hiện tại", () => {
@@ -64,7 +69,7 @@ describe("isExpired", () => {
     vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
     const now = Math.floor(Date.now() / 1000);
 
-    expect(isExpired({ id: 1, roles: [], exp: now - 1 })).toBe(true);
-    expect(isExpired({ id: 1, roles: [], exp: now + 60 })).toBe(false);
+    expect(isExpired({ id: 1, exp: now - 1 })).toBe(true);
+    expect(isExpired({ id: 1, exp: now + 60 })).toBe(false);
   });
 });

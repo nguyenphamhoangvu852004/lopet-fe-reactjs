@@ -1,10 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { friendApi } from "../../api/endpoints";
 import { useAuth } from "../../context/AuthContext";
-import { useGroupInvites } from "../../hooks/useGroupInvites";
 import { Avatar, Button } from "../ui";
-import { NotificationBell } from "./NotificationBell";
 
 const THEME_KEY = "lopet:theme";
 
@@ -26,30 +23,19 @@ interface NavEntry {
   to: string;
   label: string;
   glyph: string;
-  /** Quyền cần có để hiện mục này; bỏ trống nghĩa là baseline */
-  permission?: string;
-  badge?: number;
 }
 
-const STAFF_NAV: NavEntry[] = [
-  {
-    to: "/admin/accounts",
-    label: "Tài khoản",
-    glyph: "🗂️",
-    permission: "account:read",
-  },
-  {
-    to: "/admin/reports",
-    label: "Báo cáo",
-    glyph: "🚩",
-    permission: "report:read",
-  },
-  {
-    to: "/admin/advertisers",
-    label: "Duyệt quảng cáo",
-    glyph: "✅",
-    permission: "advertiser:read",
-  },
+/**
+ * Điều hướng phẳng, không còn nhánh "Quản trị".
+ *
+ * Backend đã gỡ phân quyền cùng ba module bạn bè / tin nhắn / thông báo, nên
+ * cũng không còn huy hiệu số nào để đếm ở đây — mọi mục đều dẫn tới thứ mà bất
+ * kỳ tài khoản đã đăng nhập nào cũng mở được.
+ */
+const MAIN_NAV: NavEntry[] = [
+  { to: "/", label: "Bảng tin", glyph: "🏠" },
+  { to: "/accounts", label: "Tài khoản", glyph: "🗂️" },
+  { to: "/settings", label: "Cài đặt", glyph: "⚙️" },
 ];
 
 export function AppShell({
@@ -59,44 +45,10 @@ export function AppShell({
   children: ReactNode;
   rail?: ReactNode;
 }) {
-  const { user, logout, can } = useAuth();
+  const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
-  const [pendingRequests, setPendingRequests] = useState(0);
-  // Lời mời vào nhóm gắn với THÚ CƯNG đang chọn, nên hook tự tải lại khi đổi bé.
-  const { invites: groupInvites } = useGroupInvites();
-
-  // Huy hiệu lời mời kết bạn. Tải một lần khi vào app — không có kênh realtime
-  // cho lời mời nên cũng không có gì để cộng thêm.
-  // Huy hiệu thông báo đã chuyển sang <NotificationBell> cùng dữ liệu của nó.
-  useEffect(() => {
-    if (!user) return;
-    friendApi
-      .received(user.id)
-      .then((data) => setPendingRequests(data?.others?.length ?? 0))
-      .catch(() => setPendingRequests(0));
-  }, [user]);
-
-  const mainNav: NavEntry[] = [
-    { to: "/", label: "Bảng tin", glyph: "🏠" },
-    { to: "/friends", label: "Bạn bè", glyph: "👥", badge: pendingRequests },
-    {
-      to: "/groups",
-      label: "Nhóm",
-      glyph: "🧩",
-      badge: groupInvites.length,
-    },
-    { to: "/messages", label: "Tin nhắn", glyph: "💬" },
-    // "Thông báo" không còn ở đây: nó là cái chuông trên thanh header. Route
-    // /notifications vẫn sống để panel dẫn sang bản đầy đủ.
-    { to: "/advertiser", label: "Nhà quảng cáo", glyph: "📣" },
-    { to: "/settings", label: "Cài đặt", glyph: "⚙️" },
-  ];
-
-  // Chỉ hiện mục staff mà tài khoản thực sự có quyền. Đây thuần tuý là UX —
-  // backend vẫn chặn bằng requirePermission nếu ai đó gõ thẳng URL.
-  const staffNav = STAFF_NAV.filter((n) => !n.permission || can(n.permission));
 
   return (
     <div className="shell">
@@ -119,12 +71,11 @@ export function AppShell({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Tìm người, nhóm, bài viết…"
+            placeholder="Tìm người, bài viết…"
           />
         </form>
 
         <div className="topbar-actions">
-          <NotificationBell />
           <Button variant="icon" onClick={toggle} title="Đổi giao diện">
             {theme === "light" ? "🌙" : "☀️"}
           </Button>
@@ -151,7 +102,7 @@ export function AppShell({
       <div className={`layout ${rail ? "" : "no-rail"}`}>
         <aside className="sidebar">
           <nav className="nav">
-            {mainNav.map((item) => (
+            {MAIN_NAV.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -162,27 +113,8 @@ export function AppShell({
               >
                 <span className="glyph">{item.glyph}</span>
                 <span className="nav-label grow">{item.label}</span>
-                {item.badge ? <span className="pill">{item.badge}</span> : null}
               </NavLink>
             ))}
-
-            {staffNav.length > 0 && (
-              <>
-                <div className="nav-section">Quản trị</div>
-                {staffNav.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    className={({ isActive }) =>
-                      `nav-item ${isActive ? "active" : ""}`
-                    }
-                  >
-                    <span className="glyph">{item.glyph}</span>
-                    <span className="nav-label">{item.label}</span>
-                  </NavLink>
-                ))}
-              </>
-            )}
           </nav>
         </aside>
 

@@ -123,22 +123,27 @@ function buildThreads(list: Comment[]): Thread[] {
 function CommentRow({
   comment,
   replyingTo,
+  postAuthorId,
   onChanged,
   onReply,
   size = "root",
 }: {
   comment: Comment;
   replyingTo?: Comment;
+  postAuthorId?: number | null;
   onChanged: () => void;
   onReply?: (comment: Comment) => void;
   size?: "root" | "reply";
 }) {
-  const { can } = useAuth();
   const { user } = useAuth();
   const [error, setError] = useState("");
-  /** Chủ bình luận xoá được của mình; staff có post:delete xoá được của bất kỳ ai */
+  /**
+   * Khớp đúng điều kiện của backend (CommentService.delete): tác giả bình luận
+   * hoặc chủ bài viết. Không còn ngoại lệ cho quản trị viên — phân quyền đã bị gỡ.
+   */
   const canDelete =
-    comment.account?.id === user?.id || can("post:delete");
+    comment.account?.id === user?.id ||
+    (postAuthorId != null && postAuthorId === user?.id);
 
   return (
     <div className="comment-row">
@@ -217,11 +222,13 @@ function CommentRow({
 function ThreadView({
   thread,
   expandedByDefault,
+  postAuthorId,
   onChanged,
   onReply,
 }: {
   thread: Thread;
   expandedByDefault: boolean;
+  postAuthorId?: number | null;
   onChanged: () => void;
   onReply: (comment: Comment) => void;
 }) {
@@ -239,6 +246,7 @@ function ThreadView({
     <div className="comment-thread">
       <CommentRow
         comment={thread.root}
+        postAuthorId={postAuthorId}
         onChanged={onChanged}
         onReply={onReply}
       />
@@ -274,6 +282,7 @@ function ThreadView({
                     key={reply.comment.id}
                     comment={reply.comment}
                     replyingTo={reply.replyingTo}
+                    postAuthorId={postAuthorId}
                     onChanged={onChanged}
                     onReply={onReply}
                     size="reply"
@@ -301,15 +310,18 @@ function ThreadView({
 export function CommentSection({
   postId,
   variant,
+  postAuthorId,
   onCountChange,
   inputRef,
 }: {
   postId: number;
   variant: "preview" | "full";
+  /** Chủ bài viết cũng xoá được bình luận của người khác trong bài của mình */
+  postAuthorId?: number | null;
   onCountChange?: (count: number) => void;
   inputRef?: React.RefObject<HTMLInputElement | null>;
 }) {
-  const { can, user } = useAuth();
+  const { user } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
   const [draft, setDraft] = useState("");
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
@@ -365,8 +377,6 @@ export function CommentSection({
       setImage(null);
       if (fileRef.current) fileRef.current.value = "";
       await load();
-      // Thông báo cho chủ bài do backend tự bắn trong CommentService — kèm id bài
-      // viết để bấm vào mở được đúng chỗ, thứ mà lời gọi từ client không có.
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -385,7 +395,7 @@ export function CommentSection({
   const composer = (
     <Composer
       user={user}
-      canComment={can("comment:create")}
+      canComment={Boolean(user)}
       draft={draft}
       setDraft={setDraft}
       image={image}
@@ -422,6 +432,7 @@ export function CommentSection({
           thread={thread}
           // Bảng tin gập sẵn phản hồi cho gọn; trang chi tiết mở sẵn
           expandedByDefault={variant === "full"}
+          postAuthorId={postAuthorId}
           onChanged={load}
           onReply={startReply}
         />

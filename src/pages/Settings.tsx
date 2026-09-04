@@ -4,14 +4,11 @@ import { errorMessage } from "../api/client";
 import { authApi } from "../api/endpoints";
 import {
   Alert,
-  Badge,
   Button,
   Card,
   CardHead,
 } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
-import { useRealtime } from "../context/RealtimeContext";
-import { BASELINE_PERMISSIONS, resolvePermissions } from "../authz/permissions";
 
 /**
  * Đổi mật khẩu đi qua hai endpoint:
@@ -114,9 +111,7 @@ function ChangePassword() {
 }
 
 export function SettingsPage() {
-  const { user, isStaff } = useAuth();
-  const { connected } = useRealtime();
-  const granted = [...resolvePermissions(user?.roles ?? [])].sort();
+  const { user } = useAuth();
 
   return (
     <>
@@ -132,26 +127,6 @@ export function SettingsPage() {
             <span>#{user?.id}</span>
           </div>
           <div className="row-between">
-            <span className="muted">Vai trò</span>
-            <span className="row">
-              {isStaff ? (
-                user?.roles.map((role) => (
-                  <Badge key={role} tone="brand">
-                    {role}
-                  </Badge>
-                ))
-              ) : (
-                <Badge>Người dùng</Badge>
-              )}
-            </span>
-          </div>
-          <div className="row-between">
-            <span className="muted">Kết nối thời gian thực</span>
-            <Badge tone={connected ? "ok" : "warn"}>
-              {connected ? "Đang kết nối" : "Mất kết nối"}
-            </Badge>
-          </div>
-          <div className="row-between">
             <span className="muted">Hồ sơ cá nhân</span>
             <Link to={`/profile/${user?.id}`}>Mở trang cá nhân</Link>
           </div>
@@ -159,24 +134,6 @@ export function SettingsPage() {
       </Card>
 
       <ChangePassword />
-
-      <Card>
-        <CardHead
-          title="Quyền hiệu lực"
-          sub={`${BASELINE_PERMISSIONS.length} quyền cơ bản + quyền theo vai trò`}
-        />
-        <div className="row" style={{ flexWrap: "wrap" }}>
-          {granted.map((permission) => (
-            <Badge key={permission} tone={permission === "*" ? "brand" : "default"}>
-              {permission}
-            </Badge>
-          ))}
-        </div>
-        <div className="faint" style={{ marginTop: 10 }}>
-          Danh sách này chỉ để tham khảo và quyết định ẩn/hiện giao diện. Mọi
-          thao tác vẫn được backend kiểm tra lại.
-        </div>
-      </Card>
     </>
   );
 }

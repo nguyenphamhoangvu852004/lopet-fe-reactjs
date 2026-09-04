@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { errorMessage, isForbidden } from "../api/client";
-import { accountApi, accountProfileApi, friendApi, postApi } from "../api/endpoints";
+import { useParams } from "react-router-dom";
+import { errorMessage } from "../api/client";
+import { accountApi, accountProfileApi, postApi } from "../api/endpoints";
 import { PostCard } from "../components/post/PostCard";
-import { ReportDialog } from "../components/report/ReportDialog";
 import {
   Alert,
   Avatar,
@@ -16,55 +15,26 @@ import {
   Spinner,
 } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
-import type {
-  Account,
-  FriendEntry,
-  Post,
-  Profile,
-  ProfileVisibility,
-} from "../types";
+import type { Account, Post, Profile } from "../types";
 
-/** Quan hệ giữa người xem và tài khoản đang mở */
-type Relation = "self" | "friend" | "sent" | "received" | "none";
-
+/**
+ * Trang cá nhân.
+ *
+ * Không còn khối bạn bè, nút kết bạn / nhắn tin và nút báo cáo: backend đã gỡ
+ * các module friendship, message, notification và report. Hành động duy nhất
+ * còn lại trên trang của người khác là xem — với chính mình thì thêm "Sửa hồ sơ".
+ */
 export function ProfilePage() {
   const { id } = useParams();
   const accountId = Number(id);
   const { user, refresh } = useAuth();
-  const navigate = useNavigate();
   const isMe = accountId === user?.id;
 
   const [account, setAccount] = useState<Account | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
-  const [friends, setFriends] = useState<FriendEntry[]>([]);
-  const [friendsBlocked, setFriendsBlocked] = useState(false);
-  const [relation, setRelation] = useState<Relation>("none");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
-  const [reporting, setReporting] = useState(false);
-
-  const loadRelation = useCallback(async () => {
-    if (!user || isMe) {
-      setRelation(isMe ? "self" : "none");
-      return;
-    }
-    try {
-      const [mine, sent, received] = await Promise.all([
-        friendApi.listOf(user.id).catch(() => null),
-        friendApi.sent(user.id).catch(() => null),
-        friendApi.received(user.id).catch(() => null),
-      ]);
-      if (mine?.others?.some((f) => f.id === accountId)) setRelation("friend");
-      else if (sent?.others?.some((f) => f.id === accountId))
-        setRelation("sent");
-      else if (received?.others?.some((f) => f.id === accountId))
-        setRelation("received");
-      else setRelation("none");
-    } catch {
-      setRelation("none");
-    }
-  }, [user, isMe, accountId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,33 +51,11 @@ export function ProfilePage() {
     } finally {
       setLoading(false);
     }
-
-    // Danh sách bạn bè giờ chỉ chính chủ và bạn bè xem được; 403 là kết quả
-    // hợp lệ chứ không phải lỗi, nên hiển thị thành thông báo riêng.
-    try {
-      const data = await friendApi.listOf(accountId);
-      setFriends(data?.others ?? []);
-      setFriendsBlocked(false);
-    } catch (e) {
-      setFriends([]);
-      setFriendsBlocked(isForbidden(e));
-    }
-
-    await loadRelation();
-  }, [accountId, loadRelation]);
+  }, [accountId]);
 
   useEffect(() => {
     load();
   }, [load]);
-
-  async function act(fn: () => Promise<unknown>) {
-    try {
-      await fn();
-      await loadRelation();
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  }
 
   if (loading) return <Spinner />;
   if (!account)
@@ -140,83 +88,16 @@ export function ProfilePage() {
               {account.profile?.fullName || account.username}
             </div>
             <div className="faint">@{account.username}</div>
-            {account.roles && account.roles.length > 0 && (
-              <div className="row" style={{ marginTop: 4 }}>
-                {account.roles.map((role) => (
-                  <Badge key={role} tone="brand">
-                    {role}
-                  </Badge>
-                ))}
-              </div>
-            )}
             {account.isBanned ? <Badge tone="danger">Đã bị khoá</Badge> : null}
           </div>
 
           <div className="profile-actions">
             {/* Không còn nhánh "Tạo hồ sơ": mỗi tài khoản được backend cấp sẵn hồ sơ ngay khi
                 đăng ký, nên với chính chủ luôn chỉ có một hành động là sửa. */}
-            {isMe ? (
+            {isMe && (
               <Button variant="outline" onClick={() => setEditing(true)}>
                 Sửa hồ sơ
               </Button>
-            ) : (
-              <>
-                {relation === "friend" && (
-                  <>
-                    <Button onClick={() => navigate(`/messages/${accountId}`)}>
-                      Nhắn tin
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => act(() => friendApi.remove(accountId))}
-                    >
-                      Huỷ kết bạn
-                    </Button>
-                  </>
-                )}
-                {relation === "sent" && (
-                  <Button
-                    variant="ghost"
-                    onClick={() => act(() => friendApi.remove(accountId))}
-                  >
-                    Thu hồi lời mời
-                  </Button>
-                )}
-                {relation === "received" && (
-                  <>
-                    <Button
-                      onClick={() => act(() => friendApi.accept(accountId))}
-                    >
-                      Chấp nhận
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => act(() => friendApi.reject(accountId))}
-                    >
-                      Từ chối
-                    </Button>
-                  </>
-                )}
-                {relation === "none" && (
-                  <Button
-                    onClick={() =>
-                      act(async () => {
-                        // Thông báo do backend bắn trong FriendshipService
-                        await friendApi.request(accountId);
-                      })
-                    }
-                  >
-                    Kết bạn
-                  </Button>
-                )}
-                <Button
-                  variant="icon"
-                  title="Báo cáo người dùng"
-                  onClick={() => setReporting(true)}
-                >
-                  🚩
-                </Button>
-              </>
             )}
           </div>
         </div>
@@ -249,35 +130,6 @@ export function ProfilePage() {
         <Alert>{error}</Alert>
       </Card>
 
-      <Card tight>
-        <CardHead
-          title="Bạn bè"
-          sub={friendsBlocked ? undefined : `${friends.length} người`}
-        />
-        {friendsBlocked ? (
-          <div className="faint">
-            🔒 Chỉ bạn bè của tài khoản này mới xem được danh sách bạn bè.
-          </div>
-        ) : friends.length === 0 ? (
-          <div className="faint">Chưa có bạn bè</div>
-        ) : (
-          <div className="row" style={{ flexWrap: "wrap", gap: 14 }}>
-            {friends.map((friend) => (
-              <Link
-                key={friend.id}
-                to={`/profile/${friend.id}`}
-                style={{ textAlign: "center", width: 72 }}
-              >
-                <Avatar src={friend.imageUrl} name={friend.username} size={56} />
-                <div className="faint truncate" style={{ marginTop: 4 }}>
-                  {friend.username}
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </Card>
-
       <CardHead title="Bài viết" />
       {posts.length === 0 ? (
         <Card>
@@ -304,13 +156,6 @@ export function ProfilePage() {
           }}
         />
       )}
-
-      <ReportDialog
-        open={reporting}
-        type="USER"
-        targetId={accountId}
-        onClose={() => setReporting(false)}
-      />
     </>
   );
 }
@@ -344,9 +189,6 @@ function ProfileFormModal({
   const [dateOfBirth, setDateOfBirth] = useState(
     profile?.dateOfBirth ? profile.dateOfBirth.slice(0, 10) : "",
   );
-  const [visibility, setVisibility] = useState<ProfileVisibility>(
-    profile?.visibility ?? "PUBLIC",
-  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const avatarRef = useRef<HTMLInputElement>(null);
@@ -359,7 +201,6 @@ function ProfileFormModal({
     form.append("phoneNumber", phoneNumber);
     form.append("hometown", hometown);
     form.append("sex", sex);
-    form.append("visibility", visibility);
     if (dateOfBirth) form.append("dateOfBirth", dateOfBirth);
     const avatar = avatarRef.current?.files?.[0];
     const cover = coverRef.current?.files?.[0];
@@ -449,25 +290,6 @@ function ProfileFormModal({
           value={dateOfBirth}
           onChange={(e) => setDateOfBirth(e.target.value)}
         />
-      </div>
-      <div className="field">
-        <label>Ai xem được hồ sơ này</label>
-        <select
-          className="select"
-          value={visibility}
-          onChange={(e) =>
-            setVisibility(e.target.value as ProfileVisibility)
-          }
-        >
-          <option value="PUBLIC">Mọi người</option>
-          <option value="FRIEND">Chỉ bạn bè</option>
-          <option value="PRIVATE">Chỉ mình tôi</option>
-        </select>
-        {/* Chỉ che HỒ SƠ. Bài viết có phạm vi riêng, đặt lúc đăng — hai thứ độc
-            lập, và nói rõ ở đây để người dùng không tưởng mình vừa ẩn cả tường. */}
-        <div className="faint" style={{ marginTop: 4 }}>
-          Chỉ áp dụng cho hồ sơ. Phạm vi của từng bài viết đặt riêng lúc đăng.
-        </div>
       </div>
       <div className="field">
         <label>Ảnh đại diện</label>
