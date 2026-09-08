@@ -18,7 +18,7 @@ import { useAuth } from "../context/AuthContext";
 import { prefetchAccountProfiles } from "../hooks/useAccountProfileLite";
 import type { Account, Post } from "../types";
 
-type FeedTab = "latest" | "cursor" | "suggest";
+type FeedTab = "latest" | "cursor";
 
 /**
  * Cột phải chỉ còn gợi ý người dùng.
@@ -93,9 +93,7 @@ export function FeedPage() {
     setLoading(true);
     try {
       let list: Post[];
-      if (tab === "suggest") {
-        list = await postApi.suggest();
-      } else if (tab === "cursor") {
+      if (tab === "cursor") {
         // Lô đầu tiên: không gửi cursor, backend tự lấy từ bài cũ nhất
         const page = await postApi.feedByCursor(null, CURSOR_PAGE_SIZE);
         list = page.content;
@@ -158,7 +156,6 @@ export function FeedPage() {
           options={[
             { value: "latest", label: "Mới nhất" },
             { value: "cursor", label: "Cuộn tiếp" },
-            { value: "suggest", label: "Gợi ý cho bạn" },
           ]}
         />
       </Card>
