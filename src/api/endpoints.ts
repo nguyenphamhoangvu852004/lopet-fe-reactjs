@@ -147,12 +147,12 @@ const EMPTY_CURSOR_PAGE: CursorPage<Post> = {
 
 export const postApi = {
   /**
-   * GET /v1/posts phân trang theo offset và trả về `OffsetPage`, KHÔNG phải mảng
-   * thô — đọc `.content` chứ đừng map thẳng kết quả.
+   * GET /v1/posts/limit-offset phân trang theo offset và trả về `OffsetPage`,
+   * KHÔNG phải mảng thô — đọc `.content` chứ đừng map thẳng kết quả.
    */
   feed: (filter: PostFilter = {}) =>
     api
-      .get("/v1/posts", { params: filter })
+      .get("/v1/posts/limit-offset", { params: filter })
       .then(unwrap<OffsetPage<Post>>)
       .then((page) => page ?? EMPTY_PAGE),
   /**
@@ -172,11 +172,6 @@ export const postApi = {
       })
       .then(unwrap<CursorPage<Post>>)
       .then((page) => page ?? EMPTY_CURSOR_PAGE),
-  suggest: () =>
-    api
-      .get("/v1/posts/suggest")
-      .then(unwrap<Post[]>)
-      .then((list) => list ?? []),
   detail: (id: number) =>
     api
       .get(`/v1/posts/${id}`)
